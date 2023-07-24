@@ -2,7 +2,7 @@
 
 module ClickhouseActiverecord
   class Tasks
-    delegate :connection, :establish_connection, to: ActiveRecord::Base
+    delegate :connection, :establish_connection, :clear_active_connections!, to: ActiveRecord::Base
 
     def self.using_database_configurations?
       true

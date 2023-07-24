@@ -13,6 +13,7 @@ namespace :clickhouse do
 
   namespace :schema do
     # TODO: deprecated
+    # TODO: not testing
     desc 'Load database schema'
     task load: %i[prepare_internal_metadata_table] do
       puts 'Warning: `rake clickhouse:schema:load` is deprecated! Use `rake db:schema:load:clickhouse` instead'
