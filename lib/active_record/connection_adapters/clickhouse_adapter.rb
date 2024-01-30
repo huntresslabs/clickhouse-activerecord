@@ -144,6 +144,10 @@ module ActiveRecord
         @full_config[:migrations_paths] || 'db/migrate_clickhouse'
       end
 
+      def use_metadata_table?
+        @full_config.fetch(:use_metadata_table, true)
+      end
+
       def migration_context # :nodoc:
         ClickhouseActiverecord::MigrationContext.new(migrations_paths, schema_migration)
       end
