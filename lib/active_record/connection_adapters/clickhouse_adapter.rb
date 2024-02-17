@@ -441,6 +441,10 @@ module ActiveRecord
         sql
       end
 
+      def create_function(name, definition)
+        do_execute "CREATE FUNCTION #{name} AS #{definition}", format: nil
+      end
+
       protected
 
       def last_inserted_id(result)
