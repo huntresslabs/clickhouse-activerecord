@@ -135,6 +135,19 @@ module ActiveRecord
         connect
       end
 
+      def supports_savepoints?
+        false
+      end
+
+      def create_savepoint(name)
+      end
+
+      def exec_rollback_to_savepoint(name)
+      end
+
+      def release_savepoint(name)
+      end
+
       # Support SchemaMigration from v5.2.2 to v6+
       def schema_migration # :nodoc:
         ClickhouseActiverecord::SchemaMigration
