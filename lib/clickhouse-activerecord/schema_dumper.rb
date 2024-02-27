@@ -57,6 +57,9 @@ HEADER
           match = sql.match(/^CREATE\s+(MATERIALIZED\s+)?VIEW/)
         end
 
+        # Temporarily skip materialized views
+        return if match && match[1].presence
+
         # Copy from original dumper
         columns = @connection.columns(table)
         begin
