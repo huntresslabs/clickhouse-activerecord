@@ -123,9 +123,9 @@ module ActiveRecord
       def initialize(logger, connection_parameters, config, full_config)
         super(nil, logger)
         @connection_parameters = connection_parameters
-        @config = config
+        @connect_config = config
         @debug = full_config[:debug] || false
-        @full_config = full_config
+        @config = @full_config = full_config
 
         @prepared_statements = false
         if ActiveRecord::version == Gem::Version.new('6.0.0')
@@ -307,7 +307,7 @@ module ActiveRecord
       def create_database(name)
         sql = apply_cluster "CREATE DATABASE #{quote_table_name(name)}"
         log_with_debug(sql, adapter_name) do
-          res = @connection.post("/?#{@config.except(:database).to_param}", sql)
+          res = @connection.post("/?#{@connect_config.except(:database).to_param}", sql)
           process_response(res)
         end
       end
@@ -343,7 +343,7 @@ module ActiveRecord
           raise 'Set a cluster' unless cluster
 
           distributed_options =
-            "Distributed(#{cluster}, #{@config[:database]}, #{table_name}, #{sharding_key})"
+            "Distributed(#{cluster}, #{@connect_config[:database]}, #{table_name}, #{sharding_key})"
           create_table(distributed_table_name, **options.merge(options: distributed_options), &block)
         end
       end
@@ -352,7 +352,7 @@ module ActiveRecord
       def drop_database(name) #:nodoc:
         sql = apply_cluster "DROP DATABASE IF EXISTS #{quote_table_name(name)}"
         log_with_debug(sql, adapter_name) do
-          res = @connection.post("/?#{@config.except(:database).to_param}", sql)
+          res = @connection.post("/?#{@connect_config.except(:database).to_param}", sql)
           process_response(res)
         end
       end
@@ -422,11 +422,11 @@ module ActiveRecord
       end
 
       def replica_path(table)
-        "/clickhouse/tables/#{cluster}/#{@config[:database]}.#{table}"
+        "/clickhouse/tables/#{cluster}/#{@connect_config[:database]}.#{table}"
       end
 
       def database_engine_atomic?
-        current_database_engine = "select engine from system.databases where name = '#{@config[:database]}'"
+        current_database_engine = "select engine from system.databases where name = '#{@connect_config[:database]}'"
         res = select_one(current_database_engine)
         res['engine'] == 'Atomic' if res
       end
