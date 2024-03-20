@@ -91,15 +91,19 @@ module ActiveRecord
 
         def do_system_execute(sql, name = nil)
           log_with_debug(sql, "#{adapter_name} #{name}") do
-            res = request(sql, DEFAULT_RESPONSE_FORMAT)
-            process_response(res, DEFAULT_RESPONSE_FORMAT, sql)
+            res = @connection.post("/?#{@connect_config.to_param}", "#{sql} FORMAT JSONCompact", 'User-Agent' => "Clickhouse ActiveRecord #{ClickhouseActiverecord::VERSION}")
+
+            process_response(res)
           end
         end
 
         def do_execute(sql, name = nil, format: DEFAULT_RESPONSE_FORMAT, settings: {})
           log(sql, "#{adapter_name} #{name}") do
-            res = request(sql, format, settings)
-            process_response(res, format, sql)
+            formatted_sql = apply_format(sql, format)
+            request_params = @connect_config || {}
+            res = @connection.post("/?#{request_params.merge(settings).to_param}", formatted_sql, 'User-Agent' => "Clickhouse ActiveRecord #{ClickhouseActiverecord::VERSION}")
+
+            process_response(res)
           end
         end
 
