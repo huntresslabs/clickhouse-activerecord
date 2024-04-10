@@ -151,10 +151,16 @@ HEADER
       (column.sql_type =~ /Array?\(/).nil? ? nil : true
     end
 
+    def schema_map(column)
+      match_data = /Map\(([^,]+)/.match(column.sql_type)
+      match_data.nil? ? nil : ":" + match_data[1].downcase
+    end
+
     def prepare_column_options(column)
       spec = {}
       spec[:unsigned] = schema_unsigned(column)
       spec[:array] = schema_array(column)
+      spec[:map] = schema_map(column)
       spec.merge(super).compact
     end
   end

@@ -7,6 +7,7 @@ require 'clickhouse-activerecord/migration'
 require 'active_record/connection_adapters/clickhouse/oid/array'
 require 'active_record/connection_adapters/clickhouse/oid/date'
 require 'active_record/connection_adapters/clickhouse/oid/date_time'
+require 'active_record/connection_adapters/clickhouse/oid/map'
 require 'active_record/connection_adapters/clickhouse/oid/uuid'
 require 'active_record/connection_adapters/clickhouse/oid/big_integer'
 require 'active_record/connection_adapters/clickhouse/schema_definitions'
@@ -235,18 +236,26 @@ module ActiveRecord
           m.register_type(%r(Array)) do |sql_type|
             Clickhouse::OID::Array.new(sql_type)
           end
+
+          m.register_type(%r(Map)) do |sql_type|
+            Clickhouse::OID::Map.new(sql_type)
+          end
         end
       end
 
+      TYPE_MAP = Type::TypeMap.new.tap { |m| ClickhouseAdapter.initialize_type_map(m) }
+
       # In Rails 7 used constant TYPE_MAP, we need redefine method
       def type_map
-        @type_map ||= Type::TypeMap.new.tap { |m| ClickhouseAdapter.initialize_type_map(m) }
+        TYPE_MAP
       end
 
       def quote(value)
         case value
         when Array
           '[' + value.map { |v| quote(v) }.join(', ') + ']'
+        when Hash
+          '{' + value.map { |k, v| "#{quote(k)}: #{quote(v)}" }.join(', ') + '}'
         else
           super
         end
