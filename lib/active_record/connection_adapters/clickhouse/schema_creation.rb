@@ -33,6 +33,10 @@ module ActiveRecord
           if options[:array]
             sql.gsub!(/\s+(.*)/, ' Array(\1)')
           end
+          if options[:map]
+            key_type = ClickhouseAdapter::NATIVE_DATABASE_TYPES.dig(options[:map],:name)
+            sql.gsub!(/\s+(.*)/, " Map(#{key_type}, \\1)")
+          end
           sql.gsub!(/(\sString)\(\d+\)/, '\1')
           sql << " DEFAULT #{quote_default_expression(options[:default], options[:column])}" if options_include_default?(options)
           sql
