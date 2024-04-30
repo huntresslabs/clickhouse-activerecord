@@ -63,11 +63,13 @@ module Arel
       def visit_Arel_Nodes_Matches(o, collector)
         op = o.case_sensitive ? " LIKE " : " ILIKE "
         infix_value o, collector, op
+        collector
       end
 
       def visit_Arel_Nodes_DoesNotMatch(o, collector)
         op = o.case_sensitive ? " NOT LIKE " : " NOT ILIKE "
         infix_value o, collector, op
+        collector
       end
 
       def sanitize_as_setting_value(value)
