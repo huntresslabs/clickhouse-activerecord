@@ -1,15 +1,16 @@
 # frozen_string_literal: true
 
 require 'arel/visitors/clickhouse'
+require 'arel/nodes/final'
 require 'arel/nodes/settings'
 require 'arel/nodes/using'
-require 'clickhouse-activerecord/migration'
 require 'active_record/connection_adapters/clickhouse/oid/array'
 require 'active_record/connection_adapters/clickhouse/oid/date'
 require 'active_record/connection_adapters/clickhouse/oid/date_time'
 require 'active_record/connection_adapters/clickhouse/oid/map'
 require 'active_record/connection_adapters/clickhouse/oid/uuid'
 require 'active_record/connection_adapters/clickhouse/oid/big_integer'
+require 'active_record/connection_adapters/clickhouse/oid/uuid'
 require 'active_record/connection_adapters/clickhouse/schema_definitions'
 require 'active_record/connection_adapters/clickhouse/schema_creation'
 require 'active_record/connection_adapters/clickhouse/schema_statements'
@@ -46,7 +47,7 @@ module ActiveRecord
           raise ArgumentError, 'No database specified. Missing argument: database.'
         end
 
-        ConnectionAdapters::ClickhouseAdapter.new(logger, connection, { user: config[:username], password: config[:password], database: database }.compact, config)
+        ConnectionAdapters::ClickhouseAdapter.new(logger, connection, config)
       end
     end
   end
@@ -65,7 +66,7 @@ module ActiveRecord
 
   module ModelSchema
     module ClassMethods
-      delegate :final, :settings, to: :all
+      delegate :final, :final!, :settings, :settings!, to: :all
 
       def is_view
         @is_view || false
@@ -74,10 +75,11 @@ module ActiveRecord
       def is_view=(value)
         @is_view = value
       end
-      #
-      # def arel_table # :nodoc:
-      #   @arel_table ||= Arel::Table.new(table_name, type_caster: type_caster)
-      # end
+
+      def _delete_record(constraints)
+        raise ActiveRecord::ActiveRecordError.new('Deleting a row is not possible without a primary key') unless self.primary_key
+        super
+      end
     end
   end
 
@@ -121,17 +123,14 @@ module ActiveRecord
       include Clickhouse::SchemaStatements
 
       # Initializes and connects a Clickhouse adapter.
-      def initialize(logger, connection_parameters, config, full_config)
+      def initialize(logger, connection_parameters, config)
         super(nil, logger)
         @connection_parameters = connection_parameters
-        @connect_config = config
-        @debug = full_config[:debug] || false
-        @config = @full_config = full_config
+        @connection_config = { user: config[:username], password: config[:password], database: config[:database] }.compact
+        @debug = config[:debug] || false
+        @config = config
 
         @prepared_statements = false
-        if ActiveRecord::version == Gem::Version.new('6.0.0')
-          @prepared_statement_status = Concurrent::ThreadLocalVar.new(false)
-        end
 
         connect
       end
@@ -155,7 +154,7 @@ module ActiveRecord
       end
 
       def migrations_paths
-        @full_config[:migrations_paths] || 'db/migrate_clickhouse'
+        @config[:migrations_paths] || 'db/migrate_clickhouse'
       end
 
       def use_metadata_table?
@@ -176,6 +175,10 @@ module ActiveRecord
 
       def valid_type?(type)
         !native_database_types[type].nil?
+      end
+
+      def supports_indexes_in_create?
+        true
       end
 
       class << self
@@ -229,6 +232,9 @@ module ActiveRecord
           register_class_with_limit m, %r(UInt64), Type::UnsignedInteger
           #register_class_with_limit m, %r(UInt128), Type::UnsignedInteger #not implemnted in clickhouse
           register_class_with_limit m, %r(UInt256), Type::UnsignedInteger
+
+          m.register_type %r(bool)i, ActiveModel::Type::Boolean.new
+          m.register_type %r{uuid}i, Clickhouse::OID::Uuid.new
           # register_class_with_limit m, %r(Array), Clickhouse::OID::Array
 
           m.register_type %r(uuid)i, Clickhouse::OID::Uuid.new
@@ -264,30 +270,18 @@ module ActiveRecord
       # Quoting time without microseconds
       def quoted_date(value)
         if value.acts_like?(:time)
-          if ActiveRecord::version >= Gem::Version.new('7')
-            zone_conversion_method = ActiveRecord.default_timezone == :utc ? :getutc : :getlocal
-          else
-            zone_conversion_method = ActiveRecord::Base.default_timezone == :utc ? :getutc : :getlocal
-          end
+          zone_conversion_method = ActiveRecord.default_timezone == :utc ? :getutc : :getlocal
 
           if value.respond_to?(zone_conversion_method)
             value = value.send(zone_conversion_method)
           end
         end
 
-        if ActiveRecord::version >= Gem::Version.new('7')
-          value.to_fs(:db)
-        else
-          value.to_s(:db)
-        end
+        value.to_fs(:db)
       end
 
       def column_name_for_operation(operation, node) # :nodoc:
-        if ActiveRecord::version >= Gem::Version.new('6')
-          visitor.compile(node)
-        else
-          column_name_from_arel_node(node)
-        end
+        visitor.compile(node)
       end
 
       # Executes insert +sql+ statement in the context of this connection using
@@ -316,8 +310,8 @@ module ActiveRecord
       def create_database(name)
         sql = apply_cluster "CREATE DATABASE #{quote_table_name(name)}"
         log_with_debug(sql, adapter_name) do
-          res = @connection.post("/?#{@connect_config.except(:database).to_param}", sql)
-          process_response(res)
+          res = @connection.post("/?#{@connection_config.except(:database).to_param}", sql)
+          process_response(res, DEFAULT_RESPONSE_FORMAT)
         end
       end
 
@@ -338,7 +332,7 @@ module ActiveRecord
         options = apply_replica(table_name, options)
         td = create_table_definition(apply_cluster(table_name), **options)
         block.call td if block_given?
-        td.column(:id, options[:id], null: false) if options[:id].present? && td[:id].blank?
+        td.column(:id, options[:id], null: false) if options[:id].present? && td[:id].blank? && options[:as].blank?
 
         if options[:force]
           drop_table(table_name, options.merge(if_exists: true))
@@ -352,17 +346,28 @@ module ActiveRecord
           raise 'Set a cluster' unless cluster
 
           distributed_options =
-            "Distributed(#{cluster}, #{@connect_config[:database]}, #{table_name}, #{sharding_key})"
+            "Distributed(#{cluster}, #{@connection_config[:database]}, #{table_name}, #{sharding_key})"
           create_table(distributed_table_name, **options.merge(options: distributed_options), &block)
         end
+      end
+
+      def create_function(name, body)
+        fd = "CREATE FUNCTION #{apply_cluster(quote_table_name(name))} AS #{body}"
+        do_execute(fd, format: nil)
       end
 
       # Drops a ClickHouse database.
       def drop_database(name) #:nodoc:
         sql = apply_cluster "DROP DATABASE IF EXISTS #{quote_table_name(name)}"
         log_with_debug(sql, adapter_name) do
-          res = @connection.post("/?#{@connect_config.except(:database).to_param}", sql)
-          process_response(res)
+          res = @connection.post("/?#{@connection_config.except(:database).to_param}", sql)
+          process_response(res, DEFAULT_RESPONSE_FORMAT)
+        end
+      end
+
+      def drop_functions
+        functions.each do |function|
+          drop_function(function)
         end
       end
 
@@ -385,6 +390,16 @@ module ActiveRecord
         end
       end
 
+      def drop_function(name, options = {})
+        query = "DROP FUNCTION"
+        query = "#{query} IF EXISTS " if options[:if_exists]
+        query = "#{query} #{quote_table_name(name)}"
+        query = apply_cluster(query)
+        query = "#{query} SYNC" if options[:sync]
+
+        do_execute(query, format: nil)
+      end
+
       def add_column(table_name, column_name, type, **options)
         return if options[:if_not_exists] == true && column_exists?(table_name, column_name, type)
 
@@ -399,8 +414,8 @@ module ActiveRecord
         execute("ALTER TABLE #{quote_table_name(table_name)} #{remove_column_for_alter(table_name, column_name, type, **options)}", nil, settings: {wait_end_of_query: 1, send_progress_in_http_headers: 1})
       end
 
-      def change_column(table_name, column_name, type, options = {})
-        result = do_execute("ALTER TABLE #{quote_table_name(table_name)} #{change_column_for_alter(table_name, column_name, type, options)}", nil, settings: {wait_end_of_query: 1, send_progress_in_http_headers: 1})
+      def change_column(table_name, column_name, type, **options)
+        result = do_execute("ALTER TABLE #{quote_table_name(table_name)} #{change_column_for_alter(table_name, column_name, type, **options)}", nil, settings: {wait_end_of_query: 1, send_progress_in_http_headers: 1})
         raise "Error parse json response: #{result}" if result.presence && !result.is_a?(Hash)
       end
 
@@ -414,16 +429,53 @@ module ActiveRecord
         change_column table_name, column_name, nil, {default: default}.compact
       end
 
+      # Adds index description to tables metadata
+      # @link https://clickhouse.com/docs/en/sql-reference/statements/alter/skipping-index
+      def add_index(table_name, expression, **options)
+        index = add_index_options(apply_cluster(table_name), expression, **options)
+        execute schema_creation.accept(CreateIndexDefinition.new(index))
+      end
+
+      # Removes index description from tables metadata and deletes index files from disk
+      def remove_index(table_name, name)
+        query = apply_cluster("ALTER TABLE #{quote_table_name(table_name)}")
+        execute "#{query} DROP INDEX #{quote_column_name(name)}"
+      end
+
+      # Rebuilds the secondary index name for the specified partition_name
+      def rebuild_index(table_name, name, if_exists: false, partition: nil)
+        query = [apply_cluster("ALTER TABLE #{quote_table_name(table_name)}")]
+        query << 'MATERIALIZE INDEX'
+        query << 'IF EXISTS' if if_exists
+        query << quote_column_name(name)
+        query << "IN PARTITION #{quote_column_name(partition)}" if partition
+        execute query.join(' ')
+      end
+
+      # Deletes the secondary index files from disk without removing description
+      def clear_index(table_name, name, if_exists: false, partition: nil)
+        query = [apply_cluster("ALTER TABLE #{quote_table_name(table_name)}")]
+        query << 'CLEAR INDEX'
+        query << 'IF EXISTS' if if_exists
+        query << quote_column_name(name)
+        query << "IN PARTITION #{quote_column_name(partition)}" if partition
+        execute query.join(' ')
+      end
+
       def cluster
-        @full_config[:cluster_name]
+        @config[:cluster_name]
       end
 
       def replica
-        @full_config[:replica_name]
+        @config[:replica_name]
+      end
+
+      def database
+        @config[:database]
       end
 
       def use_default_replicated_merge_tree_params?
-        database_engine_atomic? && @full_config[:use_default_replicated_merge_tree_params]
+        database_engine_atomic? && @config[:use_default_replicated_merge_tree_params]
       end
 
       def use_replica?
@@ -431,11 +483,11 @@ module ActiveRecord
       end
 
       def replica_path(table)
-        "/clickhouse/tables/#{cluster}/#{@connect_config[:database]}.#{table}"
+        "/clickhouse/tables/#{cluster}/#{@connection_config[:database]}.#{table}"
       end
 
       def database_engine_atomic?
-        current_database_engine = "select engine from system.databases where name = '#{@connect_config[:database]}'"
+        current_database_engine = "select engine from system.databases where name = '#{@connection_config[:database]}'"
         res = select_one(current_database_engine)
         res['engine'] == 'Atomic' if res
       end
@@ -473,9 +525,9 @@ module ActiveRecord
         result
       end
 
-      def change_column_for_alter(table_name, column_name, type, options = {})
+      def change_column_for_alter(table_name, column_name, type, **options)
         td = create_table_definition(table_name)
-        cd = td.new_column_definition(column_name, type, options)
+        cd = td.new_column_definition(column_name, type, **options)
         schema_creation.accept(ChangeColumnDefinition.new(cd, column_name))
       end
 

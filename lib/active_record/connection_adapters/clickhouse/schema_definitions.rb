@@ -68,10 +68,9 @@ module ActiveRecord
 
           if options[:precision]
             kind = :datetime64
-            options[:value] = options[:precision]
           end
 
-          args.each { |name| column(name, kind, **options.except(:precision)) }
+          args.each { |name| column(name, kind, **options) }
         end
 
         def uuid(*args, **options)
@@ -94,6 +93,23 @@ module ActiveRecord
 
           args.each { |name| column(name, kind, **options.except(:limit)) }
         end
+      end
+
+      class IndexDefinition
+        attr_reader :table, :name, :expression, :type, :granularity, :first, :after, :if_exists, :if_not_exists
+
+        def initialize(table, name, expression, type, granularity, first:, after:, if_exists:, if_not_exists:)
+          @table = table
+          @name = name
+          @expression = expression
+          @type = type
+          @granularity = granularity
+          @first = first
+          @after = after
+          @if_exists = if_exists
+          @if_not_exists = if_not_exists
+        end
+
       end
     end
   end

@@ -13,14 +13,32 @@ module Arel
         end
       end
 
-      def visit_Arel_Table o, collector
-        collector = super
-        collector << ' FINAL ' if o.final
-        collector
+      # https://clickhouse.com/docs/en/sql-reference/statements/delete
+      # DELETE and UPDATE in ClickHouse working only without table name
+      def visit_Arel_Attributes_Attribute(o, collector)
+        collector << quote_table_name(o.relation.table_alias || o.relation.name) << '.' unless collector.value.start_with?('DELETE FROM ') || collector.value.include?(' UPDATE ')
+        collector << quote_column_name(o.name)
       end
 
       def visit_Arel_Nodes_SelectOptions(o, collector)
         maybe_visit o.settings, super
+      end
+
+      def visit_Arel_Nodes_UpdateStatement(o, collector)
+        o = prepare_update_statement(o)
+
+        collector << 'ALTER TABLE '
+        collector = visit o.relation, collector
+        collect_nodes_for o.values, collector, ' UPDATE '
+        collect_nodes_for o.wheres, collector, ' WHERE ', ' AND '
+        collect_nodes_for o.orders, collector, ' ORDER BY '
+        maybe_visit o.limit, collector
+      end
+
+      def visit_Arel_Nodes_Final(o, collector)
+        visit o.expr, collector
+        collector << ' FINAL'
+        collector
       end
 
       def visit_Arel_Nodes_Settings(o, collector)
@@ -44,6 +62,12 @@ module Arel
 
       def visit_Arel_Nodes_Matches(o, collector)
         op = o.case_sensitive ? " LIKE " : " ILIKE "
+        infix_value o, collector, op
+        collector
+      end
+
+      def visit_Arel_Nodes_DoesNotMatch(o, collector)
+        op = o.case_sensitive ? " NOT LIKE " : " NOT ILIKE "
         infix_value o, collector, op
         collector
       end
