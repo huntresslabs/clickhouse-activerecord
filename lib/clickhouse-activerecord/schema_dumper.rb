@@ -34,7 +34,18 @@ HEADER
     end
 
     def tables(stream)
-      sorted_tables = @connection.tables.sort {|a,b| @connection.show_create_table(a).match(/^CREATE\s+(MATERIALIZED\s+)?VIEW/) ? 1 : a <=> b }
+      sorted_tables = @connection.tables.sort do |a, b|
+        is_view_a = @connection.show_create_table(a).match(/^CREATE\s+(MATERIALIZED\s+)?VIEW/)
+        is_view_b = @connection.show_create_table(b).match(/^CREATE\s+(MATERIALIZED\s+)?VIEW/)
+
+        if is_view_a && !is_view_b
+          1
+        elsif !is_view_a && is_view_b
+          -1
+        else
+          a <=> b
+        end
+      end
 
       sorted_tables.each do |table_name|
         table(table_name, stream) unless ignored?(table_name)
