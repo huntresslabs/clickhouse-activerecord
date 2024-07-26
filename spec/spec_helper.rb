@@ -39,8 +39,8 @@ ActiveRecord::Base.configurations = HashWithIndifferentAccess.new(
     host: 'localhost',
     port: ENV['CLICKHOUSE_PORT'] || 8123,
     database: ENV['CLICKHOUSE_DATABASE'] || 'test',
-    username: nil,
-    password: nil,
+    username: 'default',
+    password: 'docker',
     use_metadata_table: false,
     cluster_name: ENV['CLICKHOUSE_CLUSTER'],
   }
