@@ -346,5 +346,20 @@ RSpec.describe 'Migration', :migrations do
         expect(current_schema['date'].sql_type).to eq('Date')
       end
     end
+
+    describe 'alter column' do
+      it 'alters the column' do
+        migrations_dir = File.join(FIXTURES_PATH, 'migrations', 'dsl_change_column')
+        quietly { ClickhouseActiverecord::MigrationContext.new(migrations_dir, model.connection.schema_migration).up }
+
+        current_schema = schema(model)
+
+        expect(current_schema.keys.count).to eq(2)
+        expect(current_schema).to have_key('id')
+        expect(current_schema).to have_key('col')
+        expect(current_schema['id'].sql_type).to eq('UInt32')
+        expect(current_schema['col'].sql_type).to eq('Int64')
+      end
+    end
   end
 end

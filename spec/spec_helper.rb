@@ -39,9 +39,9 @@ ActiveRecord::Base.configurations = HashWithIndifferentAccess.new(
     adapter: 'clickhouse',
     host: 'localhost',
     port: 8123,
-    database: 'test',
-    username: nil,
-    password: nil
+    database: 'clickhouse_test',
+    username: 'default',
+    password: 'docker'
   }
 )
 
