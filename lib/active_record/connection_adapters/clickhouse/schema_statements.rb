@@ -44,6 +44,12 @@ module ActiveRecord
           result['data'].flatten
         end
 
+        def views(name = nil)
+          result = do_system_execute("SHOW TABLES WHERE engine = 'View'", name)
+          return [] if result.nil?
+          result['data'].flatten
+        end
+
         def table_options(table)
           sql = show_create_table(table)
           { options: sql.gsub(/^(?:.*?)(?:ENGINE = (.*?))?( AS SELECT .*?)?$/, '\\1').presence, as: sql.match(/^CREATE (?:.*?) AS (SELECT .*?)$/).try(:[], 1) }.compact
