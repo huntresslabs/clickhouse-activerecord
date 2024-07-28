@@ -133,6 +133,13 @@ module ActiveRecord
           end
         end
 
+        def views(name = nil)
+          result = do_system_execute("SHOW TABLES WHERE engine = 'View'", name)
+
+          return [] if result.nil?
+          result['data'].flatten
+        end
+
         private
 
         # Make HTTP request to ClickHouse server
@@ -195,13 +202,6 @@ module ActiveRecord
           default_value = extract_value_from_default(default)
           default_function = extract_default_function(default_value, default)
           ClickhouseColumn.new(field[0], default_value, type_metadata, field[1].include?('Nullable'), default_function)
-        end
-
-        def views(name = nil)
-          result = do_system_execute("SHOW TABLES WHERE engine = 'View'", name)
-
-          return [] if result.nil?
-          result['data'].flatten
         end
 
         protected
