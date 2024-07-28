@@ -197,6 +197,13 @@ module ActiveRecord
           ClickhouseColumn.new(field[0], default_value, type_metadata, field[1].include?('Nullable'), default_function)
         end
 
+        def views(name = nil)
+          result = do_system_execute("SHOW TABLES WHERE engine = 'View'", name)
+
+          return [] if result.nil?
+          result['data'].flatten
+        end
+
         protected
 
         def table_structure(table_name)
