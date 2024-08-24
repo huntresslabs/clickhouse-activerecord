@@ -66,7 +66,7 @@ HEADER
           # super(table.gsub(/^\.inner\./, ''), stream)
 
           # detect view table
-          match = sql.match(/^CREATE\s+(MATERIALIZED\s+)?VIEW/)
+          view_match = sql.match(/^CREATE\s+(MATERIALIZED\s+)?VIEW\s+\S+\s+(TO (\S+))?/)
         end
 
         # Copy from original dumper
@@ -81,8 +81,9 @@ HEADER
 
           unless simple
             # Add materialize flag
-            tbl.print ', view: true' if match
-            tbl.print ', materialized: true' if match && match[1].presence
+            tbl.print ', view: true' if view_match
+            tbl.print ', materialized: true' if view_match && view_match[1].presence
+            tbl.print ", to: \"#{view_match[3]}\"" if view_match && view_match[3].presence
           end
 
           case pk
@@ -111,7 +112,7 @@ HEADER
           tbl.puts ", force: :cascade do |t|"
 
           # then dump all non-primary key columns
-          if simple || !match
+          if simple || !view_match
             columns.each do |column|
               raise StandardError, "Unknown type '#{column.sql_type}' for column '#{column.name}'" unless @connection.valid_type?(column.type)
               next if column.name == pk
