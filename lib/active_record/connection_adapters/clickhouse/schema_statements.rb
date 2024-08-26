@@ -231,7 +231,7 @@ module ActiveRecord
           when "''"
             ''
           when /\A-?\d+\z/
-            default.to_i
+            default
           else
             # Anything else is blank, some user type, or some function
             # and we can't know the value of that, so return nil.
