@@ -151,7 +151,7 @@ HEADER
       if sql
         stream.puts "  # SQL: #{sql}"
         stream.puts "  create_function \"#{function}\", \"#{sql.gsub(/^CREATE FUNCTION (.*?) AS/, '').strip}\", force: true"
-        stream puts
+        stream.puts
       end
     end
 
