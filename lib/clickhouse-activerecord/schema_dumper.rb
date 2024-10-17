@@ -79,7 +79,7 @@ module ClickhouseActiverecord
           if simple || !view_match
             columns.each do |column|
               raise StandardError, "Unknown type '#{column.sql_type}' for column '#{column.name}'" unless @connection.valid_type?(column.type)
-              next if column.name == pk
+              next if column.name == pk && column.name == "id"
               type, colspec = column_spec(column)
               name = column.name =~ (/\./) ? "\"`#{column.name}`\"" : column.name.inspect
               tbl.print "    t.#{type} #{name}"
