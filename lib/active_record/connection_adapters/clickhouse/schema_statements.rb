@@ -196,7 +196,7 @@ module ActiveRecord
             body = res.body
 
             if body.include?("DB::Exception") && body.match?(DB_EXCEPTION_REGEXP)
-              raise ActiveRecord::ActiveRecordError, "Response code: #{res.code}:\n#{res.body}#{sql ? "\nQuery: #{sql}" : ''}"
+              raise ActiveRecord::ActiveRecordError, "Response code: #{res.code}:\nQuery ID: #{res.header["x-clickhouse-query-id"]}:\n#{res.body}#{sql ? "\nQuery: #{sql}" : ''}"
             else
               format_body_response(res.body, format)
             end
@@ -207,7 +207,7 @@ module ActiveRecord
               when /DB::Exception:.*\(DATABASE_ALREADY_EXISTS\)/
                 raise ActiveRecord::DatabaseAlreadyExists
               else
-                raise ActiveRecord::ActiveRecordError, "Response code: #{res.code}:\n#{res.body}"
+                raise ActiveRecord::ActiveRecordError, "Response code: #{res.code}:\nQuery ID: #{res.header["x-clickhouse-query-id"]}:\n#{res.body}"
             end
           end
         rescue JSON::ParserError
