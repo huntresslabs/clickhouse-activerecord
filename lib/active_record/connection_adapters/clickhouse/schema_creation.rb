@@ -80,6 +80,9 @@ module ActiveRecord
           # If you do not specify a database explicitly, ClickHouse will use the "default" database.
           return unless subquery
 
+          # Skip processing if FROM is followed by a subquery (indicated by opening parenthesis)
+          return if subquery.match(/from\s*\(/i)
+          
           match = subquery.match(/(?<=from)[^.\w]+(?<database>\w+(?=\.))?(?<table_name>[.\w]+)/i)
           return unless match
           return if match[:database]
