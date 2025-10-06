@@ -22,7 +22,7 @@ module ActiveRecord
 
         def internal_exec_query(sql, name = nil, binds = [], prepare: false, async: false, allow_retry: false)
           query_id = SecureRandom.uuid
-          result = do_execute(sql, name, query_id: query_id)
+          result = do_execute(sql, name, settings: { query_id: query_id })
           columns = result['meta'].map { |m| m['name'] }
           types = {}
           result['meta'].each_with_index do |m, i|
