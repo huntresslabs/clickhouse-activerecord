@@ -21,7 +21,8 @@ module ActiveRecord
         end
 
         def internal_exec_query(sql, name = nil, binds = [], prepare: false, async: false, allow_retry: false)
-          result = do_execute(sql, name)
+          query_id = SecureRandom.uuid
+          result = do_execute(sql, name, query_id:)
           columns = result['meta'].map { |m| m['name'] }
           types = {}
           result['meta'].each_with_index do |m, i|
@@ -33,7 +34,7 @@ module ActiveRecord
         rescue ActiveRecord::ActiveRecordError => e
           raise e
         rescue StandardError => e
-          raise ActiveRecord::ActiveRecordError, "Response: #{e.message}"
+          raise ActiveRecord::ActiveRecordError, "Response: #{e.message}. ClickHouse Query ID: #{query_id}"
         end
 
         def exec_insert_all(sql, name)
