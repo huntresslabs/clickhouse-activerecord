@@ -10,6 +10,10 @@ module ActiveRecord
             value = super
             return unless value
 
+            # NOTE: Workaround for the bug described in
+            # https://github.com/PNixx/clickhouse-activerecord/issues/174
+            return if value == true
+
             value.strftime('%Y-%m-%d %H:%M:%S' + (@precision.present? && @precision > 0 ? ".%#{@precision}N" : ''))
           end
 
