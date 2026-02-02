@@ -10,6 +10,13 @@ module ActiveRecord
           @codec = codec
         end
 
+        def ==(other)
+          other.is_a?(ActiveRecord::ConnectionAdapters::Clickhouse::Column) &&
+            super &&
+            codec == other.codec
+        end
+        alias eql? ==
+
         private
 
         def deduplicated
