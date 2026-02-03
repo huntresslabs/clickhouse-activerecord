@@ -234,7 +234,8 @@ module ActiveRecord
           default_value = extract_value_from_default(field[3], field[2])
           default_function = extract_default_function(field[3])
           default_value = lookup_cast_type(sql_type).cast(default_value)
-          Clickhouse::Column.new(field[0], default_value, type_metadata, field[1].include?('Nullable'), default_function, codec: field[5].presence)
+          fixed_string = extract_fixed_string(sql_type)
+          Clickhouse::Column.new(field[0], default_value, type_metadata, field[1].include?('Nullable'), default_function, codec: field[5].presence, fixed_string: fixed_string.presence)
         end
 
         protected
@@ -250,6 +251,10 @@ module ActiveRecord
         alias column_definitions table_structure
 
         private
+
+        def extract_fixed_string(sql_type)
+          ::Regexp.last_match(1).to_i if sql_type&.match(/FixedString\(([0-9]+)\)/)
+        end
 
         # Extracts the value from a PostgreSQL column default definition.
         def extract_value_from_default(default_expression, default_type)

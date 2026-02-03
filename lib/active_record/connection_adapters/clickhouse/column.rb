@@ -4,9 +4,10 @@ module ActiveRecord
       class Column < ActiveRecord::ConnectionAdapters::Column
         attr_reader :codec
 
-        def initialize(*, codec: nil, **)
+        def initialize(*, codec: nil, fixed_string: nil, **)
           super
           @codec = codec
+          @fixed_string = fixed_string
         end
 
         def ==(other)

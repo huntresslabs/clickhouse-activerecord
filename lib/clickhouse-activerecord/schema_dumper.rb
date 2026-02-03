@@ -201,6 +201,7 @@ module ClickhouseActiverecord
       end
       spec[:low_cardinality] = schema_low_cardinality(column)
       spec[:codec] = column.codec.inspect if column.codec
+      spec[:fixed_string] = column.fixed_string.inspect if column.fixed_string
       spec.merge! schema_aggregate_function(column)
       spec.merge(super).compact
     end
