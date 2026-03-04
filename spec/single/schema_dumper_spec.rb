@@ -60,5 +60,30 @@ RSpec.describe ClickhouseActiverecord::SchemaDumper, :migrations do
         ).to_stdout_from_any_process
       end
     end
+
+    context 'summing_merge_tree with aggregate function columns' do
+      let(:directory) { 'schema_table_with_summing_merge_tree_aggregate_function' }
+
+      subject do
+        # Override table_options to simulate SummingMergeTree engine
+        # even though the actual table uses AggregatingMergeTree
+        allow_any_instance_of(ActiveRecord::ConnectionAdapters::ClickhouseAdapter)
+          .to receive(:table_options)
+          .and_return({ options: "SummingMergeTree() ORDER BY (date)" })
+
+        ClickhouseActiverecord::SchemaDumper.dump
+      end
+
+      it 'suppresses aggregate_function for SummingMergeTree tables' do
+        expect { subject }.to output(
+          satisfy do |schema|
+            expect(schema).to match(/t\.float "col1"/)
+            expect(schema).not_to match(/"col1"[^\n]+aggregate_function/)
+            expect(schema).to match(/t\.float "col2"/)
+            expect(schema).not_to match(/"col2"[^\n]+aggregate_function/)
+          end
+        ).to_stdout_from_any_process
+      end
+    end
   end
 end
