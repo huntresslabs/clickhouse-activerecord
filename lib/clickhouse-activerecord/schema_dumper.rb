@@ -90,7 +90,7 @@ module ClickhouseActiverecord
               name = column.name =~ (/\./) ? "\"`#{column.name}`\"" : column.name.inspect
               if column.sql_type.match?(/^(Simple)?AggregateFunction/)
                 tbl.print "    t.column #{name}, #{column.sql_type.inspect}"
-                colspec = prepare_column_options(column)
+                colspec = prepare_column_options(column).slice(:null, :default, :codec)
                 tbl.print ", #{format_colspec(colspec)}" if colspec.present?
               else
                 type, colspec = column_spec(column)
