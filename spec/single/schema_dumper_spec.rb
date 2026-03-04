@@ -50,15 +50,6 @@ RSpec.describe ClickhouseActiverecord::SchemaDumper, :migrations do
           end
         ).to_stdout_from_any_process
       end
-
-      it 'does not include aggregate_function option in colspec' do
-        expect { subject }.to output(
-          satisfy do |schema|
-            expect(schema).not_to match(/aggregate_function:/)
-            expect(schema).not_to match(/simple_aggregate_function:/)
-          end
-        ).to_stdout_from_any_process
-      end
     end
 
     context 'summing_merge_tree with aggregate function columns' do
@@ -75,9 +66,8 @@ RSpec.describe ClickhouseActiverecord::SchemaDumper, :migrations do
       it 'dumps AggregateFunction columns as t.column with raw SQL type' do
         expect { subject }.to output(
           satisfy do |schema|
-            expect(schema).to match(/t\.column "col1", "AggregateFunction\(sum, Float64\)", null: false/)
-            expect(schema).to match(/t\.column "col2", "AggregateFunction\(anyLast, Float64\)", null: false/)
-            expect(schema).not_to match(/aggregate_function:/)
+            expect(schema).to match(/t\.column "col1", "AggregateFunction\(sum, Float64\)"/)
+            expect(schema).to match(/t\.column "col2", "AggregateFunction\(anyLast, Float64\)"/)
           end
         ).to_stdout_from_any_process
       end
@@ -89,9 +79,8 @@ RSpec.describe ClickhouseActiverecord::SchemaDumper, :migrations do
       it 'dumps AggregateFunction columns as t.column with raw SQL type' do
         expect { subject }.to output(
           satisfy do |schema|
-            expect(schema).to match(/t\.column "col1", "AggregateFunction\(sum, Float64\)", null: false/)
-            expect(schema).to match(/t\.column "col2", "AggregateFunction\(anyLast, Float64\)", null: false/)
-            expect(schema).not_to match(/aggregate_function:/)
+            expect(schema).to match(/t\.column "col1", "AggregateFunction\(sum, Float64\)"/)
+            expect(schema).to match(/t\.column "col2", "AggregateFunction\(anyLast, Float64\)"/)
           end
         ).to_stdout_from_any_process
       end
