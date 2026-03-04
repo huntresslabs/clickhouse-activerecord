@@ -69,7 +69,7 @@ RSpec.describe ClickhouseActiverecord::SchemaDumper, :migrations do
         # even though the actual table uses AggregatingMergeTree
         allow_any_instance_of(ActiveRecord::ConnectionAdapters::ClickhouseAdapter)
           .to receive(:table_options)
-          .and_return({ options: "SummingMergeTree() ORDER BY (date)" })
+          .and_return({ options: +"SummingMergeTree() ORDER BY (date)" })
 
         ClickhouseActiverecord::SchemaDumper.dump
       end

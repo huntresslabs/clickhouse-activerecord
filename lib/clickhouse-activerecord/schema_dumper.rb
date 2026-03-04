@@ -30,6 +30,7 @@ module ClickhouseActiverecord
     end
 
     def table(table, stream)
+      @current_table_engine = nil
       if table.match(/^\.inner/).nil?
         sql= ""
         simple ||= ENV['simple'] == 'true'
@@ -71,6 +72,7 @@ module ClickhouseActiverecord
 
           unless simple
             table_options = @connection.table_options(table)
+            @current_table_engine = table_options&.dig(:options)
             if table_options.present?
               table_options = format_options(table_options)
               table_options.gsub!(/Buffer\('[^']+'/, 'Buffer(\'#{connection.database}\'')
@@ -185,6 +187,8 @@ module ClickhouseActiverecord
     end
 
     def schema_aggregate_function(column)
+      return {} if @current_table_engine&.match?(/SummingMergeTree/)
+
       match = column.sql_type.match(/((?:Simple|)AggregateFunction)\((.+), (\S+)\)/)
 
       return {} if match.nil? || match.size != 4
