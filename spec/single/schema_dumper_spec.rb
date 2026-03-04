@@ -85,5 +85,20 @@ RSpec.describe ClickhouseActiverecord::SchemaDumper, :migrations do
         ).to_stdout_from_any_process
       end
     end
+
+    context 'aggregating_merge_tree preserves aggregate function columns' do
+      let(:directory) { 'schema_table_with_summing_merge_tree_aggregate_function' }
+
+      it 'preserves aggregate_function for AggregatingMergeTree tables' do
+        expect { subject }.to output(
+          satisfy do |schema|
+            expect(schema).to match(/t\.float "col1"/)
+            expect(schema).to match(/"col1"[^\n]+aggregate_function: "sum"/)
+            expect(schema).to match(/t\.float "col2"/)
+            expect(schema).to match(/"col2"[^\n]+aggregate_function: "anyLast"/)
+          end
+        ).to_stdout_from_any_process
+      end
+    end
   end
 end
