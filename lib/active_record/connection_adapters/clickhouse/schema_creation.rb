@@ -18,6 +18,17 @@ module ActiveRecord
         end
 
         def add_column_options!(sql, options)
+          # When the SQL type is already a complete (Simple)AggregateFunction definition
+          # (from t.column with raw SQL type), skip all type-wrapping options to avoid
+          # double-wrapping. Only apply codec and default which are appended, not wrapped.
+          if sql.match?(/\s+(Simple)?AggregateFunction\(/)
+            if options[:codec]
+              sql.gsub!(/\s+(.*)/, " \\1 CODEC(#{options[:codec]})")
+            end
+            sql << " DEFAULT #{quote_default_expression(options[:default], options[:column])}" if options_include_default?(options)
+            return sql
+          end
+
           if options[:value]
             sql.gsub!(/\s+(.*)/, " \\1(#{options[:value]})")
           end

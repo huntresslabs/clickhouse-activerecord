@@ -19,43 +19,68 @@ RSpec.describe ClickhouseActiverecord::SchemaDumper, :migrations do
     context 'aggregate_function' do
       let(:directory) { 'schema_table_with_aggregate_function_creation' }
 
-      it 'creates a table with aggregate function column for an Int32' do
+      it 'dumps AggregateFunction(sum, Float32) as t.column with raw SQL type' do
         expect { subject }.to output(
           satisfy do |schema|
-            expect(schema).to match(/t\.float "col1"/)
-            expect(schema).to match(/"col1"[^\n]+aggregate_function: "sum"/)
-            expect(schema).to match(/"col1"[^\n]+limit: 4/)
+            expect(schema).to match(/t\.column "col1", "AggregateFunction\(sum, Float32\)"/)
           end
         ).to_stdout_from_any_process
       end
 
-      it 'creates a table with aggregate function column for an Int64' do
+      it 'dumps AggregateFunction(anyLast, Float64) as t.column with raw SQL type' do
         expect { subject }.to output(
           satisfy do |schema|
-            expect(schema).to match(/t\.float "col2"/)
-            expect(schema).to match(/"col2"[^\n]+aggregate_function: "anyLast"/)
-            expect(schema).to match(/"col2"[^\n]+limit: 8/)
+            expect(schema).to match(/t\.column "col2", "AggregateFunction\(anyLast, Float64\)"/)
           end
         ).to_stdout_from_any_process
       end
 
-      it 'creates a table with aggregate function column for an DateTime64' do
+      it 'dumps AggregateFunction(anyLast, DateTime64) as t.column with raw SQL type' do
         expect { subject }.to output(
           satisfy do |schema|
-            expect(schema).to match(/t\.datetime "col3"/)
-            expect(schema).to match(/"col3"[^\n]+aggregate_function: "anyLast"/)
-            expect(schema).to match(/"col3"[^\n]+precision: 3/)
+            expect(schema).to match(/t\.column "col3", "AggregateFunction\(anyLast, DateTime64\(3\)\)"/)
           end
         ).to_stdout_from_any_process
       end
 
-      it 'creates a table with simple aggregate function column for an DateTime64' do
+      it 'dumps SimpleAggregateFunction as t.column with raw SQL type' do
         expect { subject }.to output(
           satisfy do |schema|
-            expect(schema).to match(/t\.datetime "col3"/)
-            expect(schema).to match(/"col3"[^\n]+aggregate_function: "anyLast"/)
-            expect(schema).to match(/"col3"[^\n]+precision: 3/)
-            expect(schema).to match(/t\.datetime "col4", simple_aggregate_function: "anyLast"/)
+            expect(schema).to match(/t\.column "col4", "SimpleAggregateFunction\(anyLast, DateTime64\(3\)\)"/)
+          end
+        ).to_stdout_from_any_process
+      end
+    end
+
+    context 'summing_merge_tree with aggregate function columns' do
+      let(:directory) { 'schema_table_with_summing_merge_tree_aggregate_function' }
+
+      subject do
+        allow_any_instance_of(ActiveRecord::ConnectionAdapters::ClickhouseAdapter)
+          .to receive(:table_options)
+          .and_return({ options: +"SummingMergeTree() ORDER BY (date)" })
+
+        ClickhouseActiverecord::SchemaDumper.dump
+      end
+
+      it 'dumps AggregateFunction columns as t.column with raw SQL type' do
+        expect { subject }.to output(
+          satisfy do |schema|
+            expect(schema).to match(/t\.column "col1", "AggregateFunction\(sum, Float64\)"/)
+            expect(schema).to match(/t\.column "col2", "AggregateFunction\(anyLast, Float64\)"/)
+          end
+        ).to_stdout_from_any_process
+      end
+    end
+
+    context 'aggregating_merge_tree preserves aggregate function columns' do
+      let(:directory) { 'schema_table_with_summing_merge_tree_aggregate_function' }
+
+      it 'dumps AggregateFunction columns as t.column with raw SQL type' do
+        expect { subject }.to output(
+          satisfy do |schema|
+            expect(schema).to match(/t\.column "col1", "AggregateFunction\(sum, Float64\)"/)
+            expect(schema).to match(/t\.column "col2", "AggregateFunction\(anyLast, Float64\)"/)
           end
         ).to_stdout_from_any_process
       end
