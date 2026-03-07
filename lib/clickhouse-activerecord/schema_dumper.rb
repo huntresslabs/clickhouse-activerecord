@@ -71,6 +71,10 @@ module ClickhouseActiverecord
 
           unless simple
             table_options = @connection.table_options(table)
+            # Suppress the "Log" engine option for materialized views - ClickHouse reports Log
+            # as the internal engine for refreshable or standalone materialized views, but it
+            # is not a user-specified engine and should not be emitted in the schema.
+            table_options.delete(:options) if view_match && table_options&.dig(:options)&.strip == "Log"
             if table_options.present?
               table_options = format_options(table_options)
               table_options.gsub!(/Buffer\('[^']+'/, 'Buffer(\'#{connection.database}\'')
@@ -87,9 +91,18 @@ module ClickhouseActiverecord
               next if column.name == pk && column.name == "id"
               name = column.name =~ (/\./) ? "\"`#{column.name}`\"" : column.name.inspect
               if column.sql_type.match?(/^(Simple)?AggregateFunction/)
-                tbl.print "    t.column #{name}, #{column.sql_type.inspect}"
-                colspec = prepare_column_options(column)
-                tbl.print ", #{format_colspec(colspec)}" if colspec.present?
+                dsl_result = aggregate_function_dsl_type(column.sql_type)
+                if dsl_result
+                  dsl_type, _is_array = dsl_result
+                  type, colspec = column_spec(column)
+                  tbl.print "    t.#{dsl_type} #{name}"
+                  tbl.print ", #{format_colspec(colspec)}" if colspec.present?
+                else
+                  # Complex inner type with no DSL equivalent - use t.column with raw SQL type
+                  tbl.print "    t.column #{name}, #{column.sql_type.inspect}"
+                  colspec = prepare_column_options(column).slice(:null, :default, :codec)
+                  tbl.print ", #{format_colspec(colspec)}" if colspec.present?
+                end
               else
                 type, colspec = column_spec(column)
                 tbl.print "    t.#{type} #{name}"
@@ -133,8 +146,11 @@ module ClickhouseActiverecord
       stream.puts "  # FUNCTION: #{function}"
       sql = @connection.show_create_function(function)
       if sql
-        stream.puts "  # SQL: #{sql}"
-        stream.puts "  create_function \"#{function}\", \"#{sql.sub(/\ACREATE( OR REPLACE)? FUNCTION .*? AS/, '').strip}\", force: true"
+        sql_escaped = sql.gsub("'", "\\\\'")
+        stream.puts "  # SQL: #{sql_escaped}"
+        body = sql.sub(/\ACREATE( OR REPLACE)? FUNCTION .*? AS/, '').strip
+        body_escaped = body.gsub("'", "\\\\'")
+        stream.puts "  create_function \"#{function}\", \"#{body_escaped}\", force: true"
         stream.puts
       end
     end
@@ -156,8 +172,9 @@ module ClickhouseActiverecord
 
     def schema_limit(column)
       if column.type == :float
-        return 4 if column.sql_type == "Float32"
-        return 8 if column.sql_type == "Float64"
+        inner = aggregate_function_inner_type(column.sql_type) || column.sql_type
+        return 4 if inner == "Float32"
+        return 8 if inner == "Float64"
       else
         super
       end
@@ -185,15 +202,61 @@ module ClickhouseActiverecord
     end
 
     def schema_aggregate_function(column)
-      match = column.sql_type.match(/((?:Simple|)AggregateFunction)\((.+), (\S+)\)/)
+      match = column.sql_type.match(/((?:Simple)?AggregateFunction)\((.+),\s*([^,]+)\)\s*\z/)
 
-      return {} if match.nil? || match.size != 4
+      return {} if match.nil?
 
       type = match[1] == "AggregateFunction" ? :aggregate_function : :simple_aggregate_function
-      { type => match[2].inspect }.tap do |spec|
-        spec[:limit] = 4 if match[3] == "Float32"
-        spec[:limit] = 8 if match[3] == "Float64"
+      { type => match[2].inspect }
+    end
+
+    # Returns the DSL column type symbol for an (Simple)AggregateFunction sql_type, based
+    # on the inner ClickHouse type. Returns nil when no DSL equivalent exists.
+    # Also returns whether an array: option should be added (for Array(X) inner types).
+    # Returns [dsl_type, is_array] or nil.
+    def aggregate_function_dsl_type(sql_type)
+      inner_full = aggregate_function_inner_type_full(sql_type)
+      return nil if inner_full.nil?
+
+      # Handle Array(X) inner types - map to the element type with array: true
+      if (array_match = inner_full.match(/\AArray\(([^)]+)\)\z/))
+        inner = array_match[1].match(/\A[A-Za-z][A-Za-z0-9]*/)[0]
+        dsl = dsl_type_for_inner(inner)
+        return dsl ? [dsl, true] : nil
       end
+
+      inner = inner_full.match(/\A([A-Za-z][A-Za-z0-9]*)/)[1]
+      dsl = dsl_type_for_inner(inner)
+      dsl ? [dsl, false] : nil
+    end
+
+    # Maps a ClickHouse base type name to a Rails DSL type symbol, or nil if unmappable.
+    def dsl_type_for_inner(inner)
+      return :float    if inner.start_with?("Float")
+      return :integer  if inner.start_with?("UInt", "Int")
+      return :datetime if inner.start_with?("DateTime")
+      return :string   if inner == "String"
+
+      nil
+    end
+
+    # Extracts the full inner data type string from an (Simple)AggregateFunction sql_type.
+    # e.g. "AggregateFunction(sum, Float64)"                   => "Float64"
+    #      "AggregateFunction(max, DateTime64(3))"             => "DateTime64(3)"
+    #      "AggregateFunction(groupUniqArrayArray, Array(String))" => "Array(String)"
+    def aggregate_function_inner_type_full(sql_type)
+      match = sql_type.match(/(?:Simple)?AggregateFunction\(.+,\s*(.+)\)\z/)
+      match ? match[1].strip : nil
+    end
+
+    # Extracts the base inner type name (no parens/suffix) for schema_limit lookups.
+    # e.g. "AggregateFunction(sum, Float64)" => "Float64"
+    #      "AggregateFunction(max, DateTime64(3))" => "DateTime64"
+    def aggregate_function_inner_type(sql_type)
+      full = aggregate_function_inner_type_full(sql_type)
+      return nil if full.nil?
+
+      full.match(/\A([A-Za-z][A-Za-z0-9]*)/)[1]
     end
 
     # @param [ActiveRecord::ConnectionAdapters::Clickhouse::Column] column
