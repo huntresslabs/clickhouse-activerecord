@@ -91,10 +91,9 @@ module ClickhouseActiverecord
               next if column.name == pk && column.name == "id"
               name = column.name =~ (/\./) ? "\"`#{column.name}`\"" : column.name.inspect
               if column.sql_type.match?(/^(Simple)?AggregateFunction/)
-                dsl_result = aggregate_function_dsl_type(column.sql_type)
-                if dsl_result
-                  dsl_type, _is_array = dsl_result
-                  type, colspec = column_spec(column)
+                dsl_type = aggregate_function_dsl_type(column.sql_type)
+                if dsl_type
+                  _type, colspec = column_spec(column)
                   tbl.print "    t.#{dsl_type} #{name}"
                   tbl.print ", #{format_colspec(colspec)}" if colspec.present?
                 else
@@ -202,61 +201,90 @@ module ClickhouseActiverecord
     end
 
     def schema_aggregate_function(column)
-      match = column.sql_type.match(/((?:Simple)?AggregateFunction)\((.+),\s*([^,]+)\)\s*\z/)
+      parts = parse_aggregate_function(column.sql_type)
+      return {} if parts.nil?
 
-      return {} if match.nil?
-
-      type = match[1] == "AggregateFunction" ? :aggregate_function : :simple_aggregate_function
-      { type => match[2].inspect }
+      type = parts[:wrapper] == "AggregateFunction" ? :aggregate_function : :simple_aggregate_function
+      { type => parts[:agg_fn].inspect }
     end
 
-    # Returns the DSL column type symbol for an (Simple)AggregateFunction sql_type, based
-    # on the inner ClickHouse type. Returns nil when no DSL equivalent exists.
-    # Also returns whether an array: option should be added (for Array(X) inner types).
-    # Returns [dsl_type, is_array] or nil.
+    # Returns the DSL column type symbol for an (Simple)AggregateFunction sql_type,
+    # based on the inner ClickHouse data type. Returns nil when no DSL equivalent exists.
     def aggregate_function_dsl_type(sql_type)
-      inner_full = aggregate_function_inner_type_full(sql_type)
-      return nil if inner_full.nil?
+      parts = parse_aggregate_function(sql_type)
+      return nil if parts.nil?
 
-      # Handle Array(X) inner types - map to the element type with array: true
+      inner_full = parts[:data_type]
+
+      # Handle Array(X) inner types - map to the element type
       if (array_match = inner_full.match(/\AArray\(([^)]+)\)\z/))
         inner = array_match[1].match(/\A[A-Za-z][A-Za-z0-9]*/)[0]
-        dsl = dsl_type_for_inner(inner)
-        return dsl ? [dsl, true] : nil
+        return dsl_type_for_inner(inner)
       end
 
       inner = inner_full.match(/\A([A-Za-z][A-Za-z0-9]*)/)[1]
-      dsl = dsl_type_for_inner(inner)
-      dsl ? [dsl, false] : nil
+      dsl_type_for_inner(inner)
     end
 
     # Maps a ClickHouse base type name to a Rails DSL type symbol, or nil if unmappable.
+    # Only plain, parameter-free type names map to DSL types; parameterised types like
+    # DateTime64(3) or FixedString(16) have no direct DSL equivalent and return nil.
     def dsl_type_for_inner(inner)
-      return :float    if inner.start_with?("Float")
-      return :integer  if inner.start_with?("UInt", "Int")
-      return :datetime if inner.start_with?("DateTime")
+      return :float    if inner.match?(/\AFloat(32|64)\z/)
+      return :integer  if inner.match?(/\A(U?Int(8|16|32|64))\z/)
+      return :datetime if inner == "DateTime"
       return :string   if inner == "String"
 
       nil
     end
 
-    # Extracts the full inner data type string from an (Simple)AggregateFunction sql_type.
-    # e.g. "AggregateFunction(sum, Float64)"                   => "Float64"
-    #      "AggregateFunction(max, DateTime64(3))"             => "DateTime64(3)"
-    #      "AggregateFunction(groupUniqArrayArray, Array(String))" => "Array(String)"
-    def aggregate_function_inner_type_full(sql_type)
-      match = sql_type.match(/(?:Simple)?AggregateFunction\(.+,\s*(.+)\)\z/)
-      match ? match[1].strip : nil
+    # Parses an (Simple)AggregateFunction sql_type into its component parts.
+    # Returns { wrapper:, agg_fn:, data_type: } or nil if not a recognised pattern.
+    #
+    # Uses a paren-depth-aware scan to find the last top-level comma, correctly
+    # handling parameterised aggregate functions (e.g. topK(10)) and complex inner
+    # types that themselves contain commas (e.g. Tuple(Float64, Float64)).
+    #
+    # Examples:
+    #   "AggregateFunction(sum, Float64)"                      => { wrapper: "AggregateFunction",       agg_fn: "sum",      data_type: "Float64" }
+    #   "AggregateFunction(topK(10), Tuple(Float64, Float64))" => { wrapper: "AggregateFunction",       agg_fn: "topK(10)", data_type: "Tuple(Float64, Float64)" }
+    #   "AggregateFunction(max, DateTime64(3))"                => { wrapper: "AggregateFunction",       agg_fn: "max",      data_type: "DateTime64(3)" }
+    #   "SimpleAggregateFunction(sum, Int64)"                  => { wrapper: "SimpleAggregateFunction", agg_fn: "sum",      data_type: "Int64" }
+    def parse_aggregate_function(sql_type)
+      outer = sql_type.match(/\A((?:Simple)?AggregateFunction)\((.+)\)\z/m)
+      return nil if outer.nil?
+
+      wrapper = outer[1]
+      inner   = outer[2]
+
+      # Find the last top-level comma (not nested inside parentheses)
+      depth      = 0
+      last_comma = nil
+      inner.chars.each_with_index do |c, i|
+        case c
+        when "(" then depth += 1
+        when ")" then depth -= 1
+        when "," then last_comma = i if depth == 0
+        end
+      end
+
+      return nil if last_comma.nil?
+
+      {
+        wrapper:   wrapper,
+        agg_fn:    inner[0...last_comma].strip,
+        data_type: inner[last_comma + 1..].strip,
+      }
     end
 
     # Extracts the base inner type name (no parens/suffix) for schema_limit lookups.
-    # e.g. "AggregateFunction(sum, Float64)" => "Float64"
+    # e.g. "AggregateFunction(sum, Float64)"    => "Float64"
     #      "AggregateFunction(max, DateTime64(3))" => "DateTime64"
     def aggregate_function_inner_type(sql_type)
-      full = aggregate_function_inner_type_full(sql_type)
-      return nil if full.nil?
+      parts = parse_aggregate_function(sql_type)
+      return nil if parts.nil?
 
-      full.match(/\A([A-Za-z][A-Za-z0-9]*)/)[1]
+      parts[:data_type].match(/\A([A-Za-z][A-Za-z0-9]*)/)[1]
     end
 
     # @param [ActiveRecord::ConnectionAdapters::Clickhouse::Column] column
