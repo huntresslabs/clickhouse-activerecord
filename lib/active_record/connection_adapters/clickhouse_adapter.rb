@@ -630,7 +630,7 @@ module ActiveRecord
         unsigned = options[:unsigned]
         unsigned = true if unsigned.nil?
 
-        kind = :uint32 # default
+        kind = unsigned ? :uint32 : :int32 # default
 
         if options[:limit]
           if unsigned
@@ -644,7 +644,7 @@ module ActiveRecord
             kind = :int8   if options[:limit] == 1
             kind = :int16  if options[:limit] == 2
             kind = :int32  if [3, 4].include?(options[:limit])
-            kind = :int64  if options[:limit] > 5 && options[:limit] <= 8
+            kind = :int64  if options[:limit] >= 5 && options[:limit] <= 8
             kind = :int128 if options[:limit] > 8 && options[:limit] <= 16
             kind = :int256 if options[:limit] > 16
           end
