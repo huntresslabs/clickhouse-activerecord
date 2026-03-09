@@ -15,22 +15,22 @@ RSpec.describe ClickhouseActiverecord::SchemaDumper, :migrations do
     ClickhouseActiverecord::SchemaDumper.dump
   end
 
-  describe ".dump" do
+  describe '.dump' do
     context 'aggregate_function' do
       let(:directory) { 'schema_table_with_aggregate_function_creation' }
 
-      it 'dumps AggregateFunction(sum, Float32) as t.column with raw SQL type' do
+      it 'dumps AggregateFunction(sum, Float32) using DSL float type' do
         expect { subject }.to output(
           satisfy do |schema|
-            expect(schema).to match(/t\.column "col1", "AggregateFunction\(sum, Float32\)"/)
+            expect(schema).to match(/t\.float "col1", aggregate_function: "sum", limit: 4, null: false/)
           end
         ).to_stdout_from_any_process
       end
 
-      it 'dumps AggregateFunction(anyLast, Float64) as t.column with raw SQL type' do
+      it 'dumps AggregateFunction(anyLast, Float64) using DSL float type' do
         expect { subject }.to output(
           satisfy do |schema|
-            expect(schema).to match(/t\.column "col2", "AggregateFunction\(anyLast, Float64\)"/)
+            expect(schema).to match(/t\.float "col2", aggregate_function: "anyLast", limit: 8, null: false/)
           end
         ).to_stdout_from_any_process
       end
@@ -58,16 +58,16 @@ RSpec.describe ClickhouseActiverecord::SchemaDumper, :migrations do
       subject do
         allow_any_instance_of(ActiveRecord::ConnectionAdapters::ClickhouseAdapter)
           .to receive(:table_options)
-          .and_return({ options: +"SummingMergeTree() ORDER BY (date)" })
+          .and_return({ options: +'SummingMergeTree() ORDER BY (date)' })
 
         ClickhouseActiverecord::SchemaDumper.dump
       end
 
-      it 'dumps AggregateFunction columns as t.column with raw SQL type' do
+      it 'dumps AggregateFunction columns using DSL float type' do
         expect { subject }.to output(
           satisfy do |schema|
-            expect(schema).to match(/t\.column "col1", "AggregateFunction\(sum, Float64\)"/)
-            expect(schema).to match(/t\.column "col2", "AggregateFunction\(anyLast, Float64\)"/)
+            expect(schema).to match(/t\.float "col1", aggregate_function: "sum", limit: 8, null: false/)
+            expect(schema).to match(/t\.float "col2", aggregate_function: "anyLast", limit: 8, null: false/)
           end
         ).to_stdout_from_any_process
       end
@@ -76,11 +76,11 @@ RSpec.describe ClickhouseActiverecord::SchemaDumper, :migrations do
     context 'aggregating_merge_tree preserves aggregate function columns' do
       let(:directory) { 'schema_table_with_summing_merge_tree_aggregate_function' }
 
-      it 'dumps AggregateFunction columns as t.column with raw SQL type' do
+      it 'dumps AggregateFunction columns using DSL float type' do
         expect { subject }.to output(
           satisfy do |schema|
-            expect(schema).to match(/t\.column "col1", "AggregateFunction\(sum, Float64\)"/)
-            expect(schema).to match(/t\.column "col2", "AggregateFunction\(anyLast, Float64\)"/)
+            expect(schema).to match(/t\.float "col1", aggregate_function: "sum", limit: 8, null: false/)
+            expect(schema).to match(/t\.float "col2", aggregate_function: "anyLast", limit: 8, null: false/)
           end
         ).to_stdout_from_any_process
       end

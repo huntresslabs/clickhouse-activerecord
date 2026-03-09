@@ -14,18 +14,27 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Clickhouse::Column do
         scale: nil
       )
     end
-    let(:cast_type) { ActiveRecord::ConnectionAdapters::Clickhouse::OID::DateTime }
+
+    # Rails 8.1 added cast_type as the second positional argument to Column#initialize.
+    # Build the argument list the same way the production code does (schema_statements.rb).
+    let(:cast_type) { double('cast_type', mutable?: false, deserialize: nil) }
+    def column_args(name, default, type_meta, null, default_fn)
+      args = [name]
+      args << cast_type if ActiveRecord.version >= Gem::Version.new('8.1')
+      args += [default, type_meta, null, default_fn]
+      args
+    end
 
     it 'is true when the codec matches' do
-      a = described_class.new('created_at', cast_type, nil, type_metadata, false, nil, codec: 'DoubleDelta, LZ4')
-      b = described_class.new('created_at', cast_type, nil, type_metadata, false, nil, codec: 'DoubleDelta, LZ4')
+      a = described_class.new(*column_args('created_at', nil, type_metadata, false, nil), codec: 'DoubleDelta, LZ4')
+      b = described_class.new(*column_args('created_at', nil, type_metadata, false, nil), codec: 'DoubleDelta, LZ4')
 
       expect(a == b).to eql(true)
     end
 
     it 'is false when the codec does not match' do
-      a = described_class.new('created_at', cast_type, nil, type_metadata, false, nil, codec: nil)
-      b = described_class.new('created_at', cast_type, nil, type_metadata, false, nil, codec: 'DoubleDelta, LZ4')
+      a = described_class.new(*column_args('created_at', nil, type_metadata, false, nil), codec: nil)
+      b = described_class.new(*column_args('created_at', nil, type_metadata, false, nil), codec: 'DoubleDelta, LZ4')
 
       expect(a == b).to eql(false)
     end
