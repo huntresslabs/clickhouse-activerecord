@@ -2,9 +2,9 @@ name: Testing
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "huntress_mods_8-0" ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "master", "huntress_mods_8-0" ]
 
 jobs:
   tests_single:
