@@ -1,10 +1,10 @@
 module ClickhouseActiverecord
   class SchemaDumper < ::ActiveRecord::ConnectionAdapters::SchemaDumper
-
     attr_accessor :simple
 
     class << self
-      def dump(connection = ActiveRecord::Base.connection, stream = STDOUT, config = ActiveRecord::Base, default = false)
+      def dump(connection = ActiveRecord::Base.connection, stream = STDOUT, config = ActiveRecord::Base,
+               default = false)
         dumper = connection.create_schema_dumper(generate_options(config))
         dumper.simple = default
         dumper.dump(stream)
@@ -30,112 +30,119 @@ module ClickhouseActiverecord
     end
 
     def table(table, stream)
-      if table.match(/^\.inner/).nil?
-        sql= ""
-        simple ||= ENV['simple'] == 'true'
-        unless simple
-          stream.puts "  # TABLE: #{table}"
-          sql = @connection.show_create_table(table)
-          stream.puts "  # SQL: #{sql.gsub(/ENGINE = Replicated(.*?)\('[^']+',\s*'[^']+',?\s?([^\)]*)?\)/, "ENGINE = \\1(\\2)")}" if sql
-          # super(table.gsub(/^\.inner\./, ''), stream)
+      return unless table.match(/^\.inner/).nil?
 
-          # detect view table
-          view_match = sql.match(/^CREATE\s+(MATERIALIZED\s+)?VIEW\s+\S+\s+(?:TO (\S+))?/)
+      sql = ''
+      simple ||= ENV['simple'] == 'true'
+      unless simple
+        stream.puts "  # TABLE: #{table}"
+        sql = @connection.show_create_table(table)
+        if sql
+          stream.puts "  # SQL: #{sql.gsub(/ENGINE = Replicated(.*?)\('[^']+',\s*'[^']+',?\s?([^)]*)?\)/,
+                                           'ENGINE = \\1(\\2)')}"
+        end
+        # super(table.gsub(/^\.inner\./, ''), stream)
+
+        # detect view table
+        view_match = sql.match(/^CREATE\s+(MATERIALIZED\s+)?VIEW\s+\S+\s+(?:TO (\S+))?/)
+      end
+
+      # Copy from original dumper
+      columns = @connection.columns(table)
+      begin
+        tbl = StringIO.new
+
+        # first dump primary key column
+        pk = @connection.primary_key(table)
+
+        tbl.print "  create_table #{remove_prefix_and_suffix(table).inspect}"
+
+        unless simple
+          # Add materialize flag
+          tbl.print ', view: true' if view_match
+          tbl.print ', materialized: true' if view_match && view_match[1].presence
+          tbl.print ", to: \"#{view_match[2]}\"" if view_match && view_match[2].presence
         end
 
-        # Copy from original dumper
-        columns = @connection.columns(table)
-        begin
-          tbl = StringIO.new
+        if (id = columns.detect { |c| c.name == 'id' })
+          spec = column_spec_for_primary_key(id)
+          tbl.print ", #{format_colspec(spec)}" if spec.present?
+        else
+          tbl.print ', id: false'
+        end
 
-          # first dump primary key column
-          pk = @connection.primary_key(table)
-
-          tbl.print "  create_table #{remove_prefix_and_suffix(table).inspect}"
-
-          unless simple
-            # Add materialize flag
-            tbl.print ', view: true' if view_match
-            tbl.print ', materialized: true' if view_match && view_match[1].presence
-            tbl.print ", to: \"#{view_match[2]}\"" if view_match && view_match[2].presence
+        unless simple
+          table_options = @connection.table_options(table)
+          # Suppress the "Log" engine option for materialized views - ClickHouse reports Log
+          # as the internal engine for refreshable or standalone materialized views, but it
+          # is not a user-specified engine and should not be emitted in the schema.
+          table_options.delete(:options) if view_match && table_options&.dig(:options)&.strip == 'Log'
+          if table_options.present?
+            table_options = format_options(table_options)
+            table_options.gsub!(/Buffer\('[^']+'/, 'Buffer(\'#{connection.database}\'')
+            tbl.print ", #{table_options}"
           end
+        end
 
-          if (id = columns.detect { |c| c.name == 'id' })
-            spec = column_spec_for_primary_key(id)
-            if spec.present?
-              tbl.print ", #{format_colspec(spec)}"
+        tbl.puts ', force: :cascade do |t|'
+
+        # then dump all non-primary key columns
+        if simple || !view_match
+          columns.each do |column|
+            unless @connection.valid_type?(column.type)
+              raise StandardError,
+                    "Unknown type '#{column.sql_type}' for column '#{column.name}'"
             end
-          else
-            tbl.print ", id: false"
-          end
+            next if column.name == pk && column.name == 'id'
 
-          unless simple
-            table_options = @connection.table_options(table)
-            # Suppress the "Log" engine option for materialized views - ClickHouse reports Log
-            # as the internal engine for refreshable or standalone materialized views, but it
-            # is not a user-specified engine and should not be emitted in the schema.
-            table_options.delete(:options) if view_match && table_options&.dig(:options)&.strip == "Log"
-            if table_options.present?
-              table_options = format_options(table_options)
-              table_options.gsub!(/Buffer\('[^']+'/, 'Buffer(\'#{connection.database}\'')
-              tbl.print ", #{table_options}"
-            end
-          end
-
-          tbl.puts ", force: :cascade do |t|"
-
-          # then dump all non-primary key columns
-          if simple || !view_match
-            columns.each do |column|
-              raise StandardError, "Unknown type '#{column.sql_type}' for column '#{column.name}'" unless @connection.valid_type?(column.type)
-              next if column.name == pk && column.name == "id"
-              name = column.name =~ (/\./) ? "\"`#{column.name}`\"" : column.name.inspect
-              if column.sql_type.match?(/^(Simple)?AggregateFunction/)
-                dsl_type = aggregate_function_dsl_type(column.sql_type)
-                if dsl_type
-                  _type, colspec = column_spec(column)
-                  tbl.print "    t.#{dsl_type} #{name}"
-                  tbl.print ", #{format_colspec(colspec)}" if colspec.present?
-                else
-                  # Complex inner type with no DSL equivalent - use t.column with raw SQL type
-                  tbl.print "    t.column #{name}, #{column.sql_type.inspect}"
-                  colspec = prepare_column_options(column).slice(:null, :default, :codec)
-                  tbl.print ", #{format_colspec(colspec)}" if colspec.present?
-                end
+            name = column.name =~ /\./ ? "\"`#{column.name}`\"" : column.name.inspect
+            if column.sql_type.match?(/^(Simple)?AggregateFunction/)
+              dsl_type = aggregate_function_dsl_type(column.sql_type)
+              if dsl_type
+                _type, colspec = column_spec(column)
+                tbl.print "    t.#{dsl_type} #{name}"
+                tbl.print ", #{format_colspec(colspec)}" if colspec.present?
               else
-                type, colspec = column_spec(column)
-                tbl.print "    t.#{type} #{name}"
+                # Complex inner type with no DSL equivalent - use t.column with raw SQL type
+                tbl.print "    t.column #{name}, #{column.sql_type.inspect}"
+                colspec = prepare_column_options(column).slice(:null, :default, :codec)
                 tbl.print ", #{format_colspec(colspec)}" if colspec.present?
               end
-              tbl.puts
+            else
+              type, colspec = column_spec(column)
+              tbl.print "    t.#{type} #{name}"
+              tbl.print ", #{format_colspec(colspec)}" if colspec.present?
             end
+            tbl.puts
           end
-
-          indexes = sql.scan(/INDEX \S+ \S+ TYPE .*? GRANULARITY \d+/)
-          if indexes.any?
-            tbl.puts ''
-            indexes.flatten.map!(&:strip).each do |index|
-              tbl.puts "    t.index #{index_parts(index).join(', ')}"
-            end
-          end
-
-          tbl.puts "  end"
-          tbl.puts
-
-          tbl.rewind
-          stream.print tbl.read
-        rescue => e
-          stream.puts "# Could not dump table #{table.inspect} because of following #{e.class}"
-          stream.puts "#   #{e.message}"
-          stream.puts
         end
+
+        indexes = sql.scan(/INDEX \S+ \S+ TYPE .*? GRANULARITY \d+/)
+        if indexes.any?
+          tbl.puts ''
+          indexes.flatten.map!(&:strip).each do |index|
+            tbl.puts "    t.index #{index_parts(index).join(', ')}"
+          end
+        end
+
+        tbl.puts '  end'
+        tbl.puts
+
+        tbl.rewind
+        stream.print tbl.read
+      rescue StandardError => e
+        stream.puts "# Could not dump table #{table.inspect} because of following #{e.class}"
+        stream.puts "#   #{e.message}"
+        stream.puts
       end
     end
 
     def column_spec_for_primary_key(column)
       spec = super
 
-      id = ActiveRecord::ConnectionAdapters::ClickhouseAdapter::NATIVE_DATABASE_TYPES.invert[{name: column.sql_type.gsub(/\(\d+\)/, "")}]
+      id = ActiveRecord::ConnectionAdapters::ClickhouseAdapter::NATIVE_DATABASE_TYPES.invert[{ name: column.sql_type.gsub(
+        /\(\d+\)/, ''
+      ) }]
       spec[:id] = id.inspect if id.present?
 
       spec.except!(:limit, :unsigned) # This can be removed at some date, it is only here to clean up existing schemas which have dumped these values already
@@ -144,26 +151,24 @@ module ClickhouseActiverecord
     def function(function, stream)
       stream.puts "  # FUNCTION: #{function}"
       sql = @connection.show_create_function(function)
-      if sql
-        sql_escaped = sql.gsub("'", "\\\\'")
-        stream.puts "  # SQL: #{sql_escaped}"
-        body = sql.sub(/\ACREATE( OR REPLACE)? FUNCTION .*? AS/, '').strip
-        body_escaped = body.gsub("'", "\\\\'")
-        stream.puts "  create_function \"#{function}\", \"#{body_escaped}\", force: true"
-        stream.puts
-      end
+      return unless sql
+
+      stream.puts "  # SQL: #{sql}"
+      body = sql.sub(/\ACREATE( OR REPLACE)? FUNCTION .*? AS/, '').strip
+      stream.puts "  create_function \"#{function}\", \"#{body}\", force: true"
+      stream.puts
     end
 
     def format_options(options)
       if options && options[:options]
-        options[:options].gsub!(/^Replicated(.*?)\('[^']+',\s*'[^']+',?\s?([^\)]*)?\)/, "\\1(\\2)")
+        options[:options].gsub!(/^Replicated(.*?)\('[^']+',\s*'[^']+',?\s?([^)]*)?\)/, '\\1(\\2)')
       end
       super
     end
 
     def format_colspec(colspec)
       if simple
-        super.gsub(/CAST\('?([^,']*)'?,\s?'.*?'\)/, "\\1")
+        super.gsub(/CAST\('?([^,']*)'?,\s?'.*?'\)/, '\\1')
       else
         super
       end
@@ -172,8 +177,9 @@ module ClickhouseActiverecord
     def schema_limit(column)
       if column.type == :float
         inner = aggregate_function_inner_type(column.sql_type) || column.sql_type
-        return 4 if inner == "Float32"
-        return 8 if inner == "Float64"
+        return 4 if inner == 'Float32'
+
+        8 if inner == 'Float64'
       else
         super
       end
@@ -181,6 +187,7 @@ module ClickhouseActiverecord
 
     def schema_unsigned(column)
       return nil unless column.type == :integer && !simple
+
       (column.sql_type =~ /(Nullable)?\(?UInt\d+\)?/).nil? ? false : nil
     end
 
@@ -189,9 +196,7 @@ module ClickhouseActiverecord
     end
 
     def schema_map(column)
-      if column.sql_type =~ /Map\(([^,]+),\s*(Array)\)/
-        return :array
-      end
+      return :array if column.sql_type =~ /Map\(([^,]+),\s*(Array)\)/
 
       (column.sql_type =~ /Map\(/).nil? ? nil : true
     end
@@ -204,7 +209,7 @@ module ClickhouseActiverecord
       parts = parse_aggregate_function(column.sql_type)
       return {} if parts.nil?
 
-      type = parts[:wrapper] == "AggregateFunction" ? :aggregate_function : :simple_aggregate_function
+      type = parts[:wrapper] == 'AggregateFunction' ? :aggregate_function : :simple_aggregate_function
       { type => parts[:agg_fn].inspect }
     end
 
@@ -232,8 +237,8 @@ module ClickhouseActiverecord
     def dsl_type_for_inner(inner)
       return :float    if inner.match?(/\AFloat(32|64)\z/)
       return :integer  if inner.match?(/\A(U?Int(8|16|32|64))\z/)
-      return :datetime if inner == "DateTime"
-      return :string   if inner == "String"
+      return :datetime if inner == 'DateTime'
+      return :string   if inner == 'String'
 
       nil
     end
@@ -262,18 +267,18 @@ module ClickhouseActiverecord
       last_comma = nil
       inner.chars.each_with_index do |c, i|
         case c
-        when "(" then depth += 1
-        when ")" then depth -= 1
-        when "," then last_comma = i if depth == 0
+        when '(' then depth += 1
+        when ')' then depth -= 1
+        when ',' then last_comma = i if depth == 0
         end
       end
 
       return nil if last_comma.nil?
 
       {
-        wrapper:   wrapper,
-        agg_fn:    inner[0...last_comma].strip,
-        data_type: inner[last_comma + 1..].strip,
+        wrapper: wrapper,
+        agg_fn: inner[0...last_comma].strip,
+        data_type: inner[last_comma + 1..].strip
       }
     end
 
@@ -293,9 +298,7 @@ module ClickhouseActiverecord
       spec[:unsigned] = schema_unsigned(column)
       spec[:array] = schema_array(column)
       spec[:map] = schema_map(column)
-      if spec[:map] == :array
-        spec[:array] = nil
-      end
+      spec[:array] = nil if spec[:map] == :array
       spec[:low_cardinality] = schema_low_cardinality(column)
       spec[:codec] = column.codec.inspect if column.codec
       spec.merge! schema_aggregate_function(column)
@@ -307,7 +310,7 @@ module ClickhouseActiverecord
       index_parts = [
         format_index_parts(idx['expr']),
         "name: #{format_index_parts(idx['name'])}",
-        "type: #{format_index_parts(idx['type'])}",
+        "type: #{format_index_parts(idx['type'])}"
       ]
       index_parts << "granularity: #{idx['granularity']}" if idx['granularity']
       index_parts
