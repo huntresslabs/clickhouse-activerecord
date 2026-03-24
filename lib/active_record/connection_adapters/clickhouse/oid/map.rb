@@ -7,7 +7,8 @@ module ActiveRecord
         class Map < Type::Value # :nodoc:
 
           def initialize(sql_type)
-            case sql_type
+            value_type = extract_map_value_type(sql_type)
+            case value_type
             when /U?Int(\d+)/
               @subtype = :integer
               @limit = bits_to_limit(Regexp.last_match(1)&.to_i)
@@ -67,6 +68,22 @@ module ActiveRecord
           end
 
           private
+
+          def extract_map_value_type(sql_type)
+            inner = sql_type[/\AMap\((.+)\)\z/m, 1]
+            return sql_type unless inner
+
+            depth = 0
+            inner.each_char.with_index do |char, i|
+              case char
+              when '(' then depth += 1
+              when ')' then depth -= 1
+              when ','
+                return inner[(i + 1)..].lstrip if depth == 0
+              end
+            end
+            sql_type
+          end
 
           def bits_to_limit(bits)
             case bits
