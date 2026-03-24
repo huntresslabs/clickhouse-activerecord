@@ -84,4 +84,14 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Clickhouse::OID::Map do
       end
     end
   end
+
+  describe '#serialize' do
+    context 'Map(Int32, String)' do
+      let(:sql_type) { 'Map(Int32, String)' }
+
+      it 'does not cast string values to integers on serialize' do
+        expect(map.serialize({'1' => 'hello'})).to eq({'1' => 'hello'})
+      end
+    end
+  end
 end

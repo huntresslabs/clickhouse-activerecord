@@ -82,7 +82,7 @@ module ActiveRecord
                 return inner[(i + 1)..].lstrip if depth == 0
               end
             end
-            sql_type
+            inner
           end
 
           def bits_to_limit(bits)
