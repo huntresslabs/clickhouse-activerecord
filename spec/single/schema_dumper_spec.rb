@@ -87,7 +87,7 @@ RSpec.describe ClickhouseActiverecord::SchemaDumper, :migrations do
       it 'dumps FixedString array with fixed_string option' do
         expect { subject }.to output(
           satisfy do |schema|
-            expect(schema).to match(/t\.string "fixed_string16_array", fixed_string: 16, array: true/)
+            expect(schema).to match(/t\.string "fixed_string16_array", array: true, fixed_string: 16/)
           end
         ).to_stdout_from_any_process
       end
@@ -95,7 +95,7 @@ RSpec.describe ClickhouseActiverecord::SchemaDumper, :migrations do
       it 'dumps FixedString map with fixed_string option' do
         expect { subject }.to output(
           satisfy do |schema|
-            expect(schema).to match(/t\.string "fixed_string16_map", fixed_string: 16, map: true/)
+            expect(schema).to match(/t\.string "fixed_string16_map", map: true, fixed_string: 16/)
           end
         ).to_stdout_from_any_process
       end
@@ -103,7 +103,7 @@ RSpec.describe ClickhouseActiverecord::SchemaDumper, :migrations do
       it 'dumps FixedString map array with fixed_string option' do
         expect { subject }.to output(
           satisfy do |schema|
-            expect(schema).to match(/t\.string "fixed_string16_map_array", fixed_string: 16, map: :array/)
+            expect(schema).to match(/t\.string "fixed_string16_map_array", array: true, map: true, fixed_string: 16/)
           end
         ).to_stdout_from_any_process
       end
