@@ -73,6 +73,42 @@ RSpec.describe ClickhouseActiverecord::SchemaDumper, :migrations do
       end
     end
 
+    context 'fixed_string' do
+      let(:directory) { 'dsl_table_with_fixed_string_creation' }
+
+      it 'dumps plain FixedString with fixed_string option' do
+        expect { subject }.to output(
+          satisfy do |schema|
+            expect(schema).to match(/t\.string "fixed_string1", fixed_string: 1, null: false/)
+          end
+        ).to_stdout_from_any_process
+      end
+
+      it 'dumps FixedString array with fixed_string option' do
+        expect { subject }.to output(
+          satisfy do |schema|
+            expect(schema).to match(/t\.string "fixed_string16_array", array: true, fixed_string: 16/)
+          end
+        ).to_stdout_from_any_process
+      end
+
+      it 'dumps FixedString map with fixed_string option' do
+        expect { subject }.to output(
+          satisfy do |schema|
+            expect(schema).to match(/t\.string "fixed_string16_map", map: true, fixed_string: 16/)
+          end
+        ).to_stdout_from_any_process
+      end
+
+      it 'dumps FixedString map array with fixed_string option' do
+        expect { subject }.to output(
+          satisfy do |schema|
+            expect(schema).to match(/t\.string "fixed_string16_map_array", array: true, map: true, fixed_string: 16/)
+          end
+        ).to_stdout_from_any_process
+      end
+    end
+
     context 'aggregating_merge_tree preserves aggregate function columns' do
       let(:directory) { 'schema_table_with_summing_merge_tree_aggregate_function' }
 

@@ -205,6 +205,11 @@ module ClickhouseActiverecord
       (column.sql_type =~ /LowCardinality\(/).nil? ? nil : true
     end
 
+    def schema_fixed_string(column)
+      match = column.sql_type.match(/FixedString\((\d+)\)/)
+      match ? match[1].to_i : nil
+    end
+
     def schema_aggregate_function(column)
       parts = parse_aggregate_function(column.sql_type)
       return {} if parts.nil?
@@ -300,6 +305,7 @@ module ClickhouseActiverecord
       spec[:map] = schema_map(column)
       spec[:array] = nil if spec[:map] == :array
       spec[:low_cardinality] = schema_low_cardinality(column)
+      spec[:fixed_string] = schema_fixed_string(column)
       spec[:codec] = column.codec.inspect if column.codec
       spec.merge! schema_aggregate_function(column)
       spec.merge(super).compact

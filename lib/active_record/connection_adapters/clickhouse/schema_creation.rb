@@ -59,7 +59,7 @@ module ActiveRecord
           if options[:simple_aggregate_function]
             sql.gsub!(/(\w+)\s+(.*)/, "\\1 SimpleAggregateFunction(#{options[:simple_aggregate_function]}, \\2)")
           end
-          sql.gsub!(/(\sString)\(\d+\)/, '\1')
+          sql.gsub!(/(?<!Fixed)(String)\(\d+\)/, '\1')
 
           if ::ActiveRecord::version >= Gem::Version.new('8.1')
             sql << " DEFAULT #{quote_default_expression_for_column_definition(options[:default], options[:column])}" if options_include_default?(options)
