@@ -318,20 +318,37 @@ module ClickhouseActiverecord
     # Extracts projection definitions from a SHOW CREATE TABLE statement.
     # ClickHouse emits each projection as `PROJECTION <name> ( <query> )` inside the
     # column list. The body may itself contain parentheses (function calls,
-    # nested expressions), so we balance parens rather than using a non-greedy regex.
+    # nested expressions) and SQL string literals containing parens, so we balance
+    # structural parens while skipping over single-quoted strings (with backslash
+    # escape support). The captured name has any surrounding backticks stripped so
+    # round-tripped names compare equal to human-authored DSL names.
     # Returns an array of [name, query] pairs with the body trimmed.
     def parse_projections(sql)
       results = []
       offset = 0
       while (match = sql.match(/PROJECTION (\S+) \(/, offset))
-        name = match[1]
+        name = match[1].delete('`')
         body_start = match.end(0)
         depth = 1
+        in_string = false
+        escaped = false
         i = body_start
         while i < sql.length && depth.positive?
-          case sql[i]
-          when '(' then depth += 1
-          when ')' then depth -= 1
+          ch = sql[i]
+          if escaped
+            escaped = false
+          elsif in_string
+            if ch == "\\"
+              escaped = true
+            elsif ch == "'"
+              in_string = false
+            end
+          else
+            case ch
+            when "'" then in_string = true
+            when '(' then depth += 1
+            when ')' then depth -= 1
+            end
           end
           i += 1
         end

@@ -144,4 +144,52 @@ RSpec.describe ClickhouseActiverecord::SchemaDumper, :migrations do
       end
     end
   end
+
+end
+
+RSpec.describe ClickhouseActiverecord::SchemaDumper, '#parse_projections' do
+  let(:dumper) { ClickhouseActiverecord::SchemaDumper.send(:allocate) }
+
+  it 'extracts a simple projection' do
+    sql = "CREATE TABLE t ( `id` UInt64, PROJECTION p1 ( SELECT * ORDER BY id ) ) ENGINE = MergeTree"
+    expect(dumper.send(:parse_projections, sql)).to eq([['p1', 'SELECT * ORDER BY id']])
+  end
+
+  it 'extracts multiple projections' do
+    sql = "CREATE TABLE t ( `id` UInt64, " \
+          "PROJECTION p1 ( SELECT * ORDER BY id ), " \
+          "PROJECTION p2 ( SELECT * ORDER BY id, id ) ) ENGINE = MergeTree"
+    expect(dumper.send(:parse_projections, sql)).to eq([
+      ['p1', 'SELECT * ORDER BY id'],
+      ['p2', 'SELECT * ORDER BY id, id']
+    ])
+  end
+
+  it 'handles parentheses inside the projection body' do
+    sql = "CREATE TABLE t ( `x` String, PROJECTION p_count ( SELECT count(*), x ORDER BY x ) ) ENGINE = MergeTree"
+    expect(dumper.send(:parse_projections, sql)).to eq([
+      ['p_count', 'SELECT count(*), x ORDER BY x']
+    ])
+  end
+
+  it 'ignores parens inside single-quoted string literals' do
+    sql = "CREATE TABLE t ( `label` String, PROJECTION p_str ( SELECT * WHERE label = '(' ORDER BY label ) ) ENGINE = MergeTree"
+    expect(dumper.send(:parse_projections, sql)).to eq([
+      ['p_str', "SELECT * WHERE label = '(' ORDER BY label"]
+    ])
+  end
+
+  it 'handles backslash-escaped quotes inside string literals' do
+    sql = "CREATE TABLE t ( `label` String, PROJECTION p_esc ( SELECT * WHERE label = 'it\\'s (open' ORDER BY label ) ) ENGINE = MergeTree"
+    expect(dumper.send(:parse_projections, sql)).to eq([
+      ['p_esc', "SELECT * WHERE label = 'it\\'s (open' ORDER BY label"]
+    ])
+  end
+
+  it 'strips backticks from projection names' do
+    sql = "CREATE TABLE t ( `id` UInt64, PROJECTION `weird-name` ( SELECT * ORDER BY id ) ) ENGINE = MergeTree"
+    expect(dumper.send(:parse_projections, sql)).to eq([
+      ['weird-name', 'SELECT * ORDER BY id']
+    ])
+  end
 end
