@@ -5,7 +5,7 @@ module ActiveRecord
     module Clickhouse
       class TableDefinition < ActiveRecord::ConnectionAdapters::TableDefinition
 
-        attr_reader :view, :materialized, :if_not_exists, :to
+        attr_reader :view, :materialized, :if_not_exists, :to, :projections
 
         def initialize(
             conn,
@@ -23,6 +23,7 @@ module ActiveRecord
           @conn = conn
           @columns_hash = {}
           @indexes = []
+          @projections = []
           @foreign_keys = []
           @primary_keys = nil
           @temporary = temporary
@@ -34,6 +35,10 @@ module ActiveRecord
           @view = view || materialized
           @materialized = materialized
           @to = to
+        end
+
+        def projection(name, query)
+          @projections << ProjectionDefinition.new(name, query)
         end
 
         def integer(*args, **options)
@@ -111,6 +116,15 @@ module ActiveRecord
 
         def valid_column_definition_options
           super + [:array, :low_cardinality, :fixed_string, :value, :type, :map, :codec, :unsigned, :aggregate_function, :simple_aggregate_function]
+        end
+      end
+
+      class ProjectionDefinition
+        attr_reader :name, :query
+
+        def initialize(name, query)
+          @name = name
+          @query = query
         end
       end
 

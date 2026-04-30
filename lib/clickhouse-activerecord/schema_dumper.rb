@@ -118,10 +118,14 @@ module ClickhouseActiverecord
         end
 
         indexes = sql.scan(/INDEX \S+ \S+ TYPE .*? GRANULARITY \d+/)
-        if indexes.any?
+        projections = parse_projections(sql)
+        if indexes.any? || projections.any?
           tbl.puts ''
           indexes.flatten.map!(&:strip).each do |index|
             tbl.puts "    t.index #{index_parts(index).join(', ')}"
+          end
+          projections.each do |name, query|
+            tbl.puts "    t.projection #{name.inspect}, #{query.inspect}"
           end
         end
 
@@ -309,6 +313,52 @@ module ClickhouseActiverecord
       spec[:codec] = column.codec.inspect if column.codec
       spec.merge! schema_aggregate_function(column)
       spec.merge(super).compact
+    end
+
+    # Extracts projection definitions from a SHOW CREATE TABLE statement.
+    # ClickHouse emits each projection as `PROJECTION <name> ( <query> )` inside the
+    # column list. The body may itself contain parentheses (function calls,
+    # nested expressions) and SQL string literals containing parens, so we balance
+    # structural parens while skipping over single-quoted strings (with backslash
+    # escape support). The captured name has any surrounding backticks stripped so
+    # round-tripped names compare equal to human-authored DSL names.
+    # Returns an array of [name, query] pairs with the body trimmed.
+    def parse_projections(sql)
+      results = []
+      offset = 0
+      while (match = sql.match(/PROJECTION (\S+) \(/, offset))
+        name = match[1].delete('`')
+        body_start = match.end(0)
+        depth = 1
+        in_string = false
+        escaped = false
+        i = body_start
+        while i < sql.length && depth.positive?
+          ch = sql[i]
+          if escaped
+            escaped = false
+          elsif in_string
+            if ch == "\\"
+              escaped = true
+            elsif ch == "'"
+              in_string = false
+            end
+          else
+            case ch
+            when "'" then in_string = true
+            when '(' then depth += 1
+            when ')' then depth -= 1
+            end
+          end
+          i += 1
+        end
+        break if depth.positive?
+
+        body = sql[body_start...(i - 1)].strip
+        results << [name, body]
+        offset = i
+      end
+      results
     end
 
     def index_parts(index)

@@ -134,6 +134,11 @@ module ActiveRecord
             statements.concat(indexes)
           end
 
+          if o.respond_to?(:projections) && o.projections.any?
+            projections = o.projections.map { |p| visit_ProjectionDefinition(p) }
+            statements.concat(projections)
+          end
+
           create_sql << "(#{statements.join(', ')})" if statements.present?
           # Attach options for only table or materialized view without TO section
           add_table_options!(create_sql, o) if !o.view || o.view && o.materialized && !o.to
@@ -180,6 +185,10 @@ module ActiveRecord
 
         def visit_CreateIndexDefinition(o)
           visit_IndexDefinition(o.index, true)
+        end
+
+        def visit_ProjectionDefinition(o)
+          "PROJECTION #{o.name} (#{o.query})"
         end
 
         def current_database
