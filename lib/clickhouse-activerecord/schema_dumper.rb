@@ -118,10 +118,14 @@ module ClickhouseActiverecord
         end
 
         indexes = sql.scan(/INDEX \S+ \S+ TYPE .*? GRANULARITY \d+/)
-        if indexes.any?
+        projections = parse_projections(sql)
+        if indexes.any? || projections.any?
           tbl.puts ''
           indexes.flatten.map!(&:strip).each do |index|
             tbl.puts "    t.index #{index_parts(index).join(', ')}"
+          end
+          projections.each do |name, query|
+            tbl.puts "    t.projection #{name.inspect}, #{query.inspect}"
           end
         end
 
@@ -309,6 +313,35 @@ module ClickhouseActiverecord
       spec[:codec] = column.codec.inspect if column.codec
       spec.merge! schema_aggregate_function(column)
       spec.merge(super).compact
+    end
+
+    # Extracts projection definitions from a SHOW CREATE TABLE statement.
+    # ClickHouse emits each projection as `PROJECTION <name> ( <query> )` inside the
+    # column list. The body may itself contain parentheses (function calls,
+    # nested expressions), so we balance parens rather than using a non-greedy regex.
+    # Returns an array of [name, query] pairs with the body trimmed.
+    def parse_projections(sql)
+      results = []
+      offset = 0
+      while (match = sql.match(/PROJECTION (\S+) \(/, offset))
+        name = match[1]
+        body_start = match.end(0)
+        depth = 1
+        i = body_start
+        while i < sql.length && depth.positive?
+          case sql[i]
+          when '(' then depth += 1
+          when ')' then depth -= 1
+          end
+          i += 1
+        end
+        break if depth.positive?
+
+        body = sql[body_start...(i - 1)].strip
+        results << [name, body]
+        offset = i
+      end
+      results
     end
 
     def index_parts(index)

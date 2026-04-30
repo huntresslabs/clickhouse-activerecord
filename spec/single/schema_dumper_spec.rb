@@ -121,5 +121,27 @@ RSpec.describe ClickhouseActiverecord::SchemaDumper, :migrations do
         ).to_stdout_from_any_process
       end
     end
+
+    context 'projection' do
+      let(:directory) { 'dsl_create_table_with_projection' }
+
+      it 'dumps t.projection entries for each table projection' do
+        expect { subject }.to output(
+          satisfy do |schema|
+            expect(schema).to match(/t\.projection "proj_by_int1", "SELECT \* ORDER BY int1, int2"/)
+            expect(schema).to match(/t\.projection "proj_by_int2", "SELECT \* ORDER BY int2, int1"/)
+          end
+        ).to_stdout_from_any_process
+      end
+
+      it 'creates the projections in ClickHouse so the SQL comment includes them' do
+        expect { subject }.to output(
+          satisfy do |schema|
+            expect(schema).to include('PROJECTION proj_by_int1')
+            expect(schema).to include('PROJECTION proj_by_int2')
+          end
+        ).to_stdout_from_any_process
+      end
+    end
   end
 end
