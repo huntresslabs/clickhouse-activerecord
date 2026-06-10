@@ -66,6 +66,8 @@ module ActiveRecord
           sql
         end
 
+        private
+
         # Appends ` MATERIALIZED <expr>` or ` DEFAULT <expr>` to a column definition.
         # MATERIALIZED takes precedence: a column carries one kind of expression, not both.
         def append_default_or_materialized!(sql, options)
@@ -87,6 +89,8 @@ module ActiveRecord
           sql << " CODEC(#{options[:codec]})" if options[:codec]
           sql
         end
+
+        public
 
         def add_table_options!(create_sql, options)
           opts = options[:options]
