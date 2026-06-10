@@ -20,12 +20,11 @@ module ActiveRecord
         def add_column_options!(sql, options)
           # When the SQL type is already a complete (Simple)AggregateFunction definition
           # (from t.column with raw SQL type), skip all type-wrapping options to avoid
-          # double-wrapping. Only apply codec and default which are appended, not wrapped.
+          # double-wrapping. Only apply the default/materialized expression and codec,
+          # which are appended, not wrapped.
           if sql.match?(/\s+(Simple)?AggregateFunction\(/)
-            if options[:codec]
-              sql.gsub!(/\s+(.*)/, " \\1 CODEC(#{options[:codec]})")
-            end
-            sql << " DEFAULT #{quote_default_expression(options[:default], options[:column])}" if options_include_default?(options)
+            append_default_or_materialized!(sql, options)
+            append_codec!(sql, options)
             return sql
           end
 
@@ -50,9 +49,6 @@ module ActiveRecord
           if options[:map] == true
             sql.gsub!(/\s+(.*)/, ' Map(String, \1)')
           end
-          if options[:codec]
-            sql.gsub!(/\s+(.*)/, " \\1 CODEC(#{options[:codec]})")
-          end
           if options[:aggregate_function]
             sql.gsub!(/(\w+)\s+(.*)/, "\\1 AggregateFunction(#{options[:aggregate_function]}, \\2)")
           end
@@ -61,13 +57,40 @@ module ActiveRecord
           end
           sql.gsub!(/(?<!Fixed)(String)\(\d+\)/, '\1')
 
-          if ::ActiveRecord::version >= Gem::Version.new('8.1')
-            sql << " DEFAULT #{quote_default_expression_for_column_definition(options[:default], options[:column])}" if options_include_default?(options)
-          else
-            sql << " DEFAULT #{quote_default_expression(options[:default], options[:column])}" if options_include_default?(options)
+          # ClickHouse column grammar requires the DEFAULT/MATERIALIZED expression
+          # before CODEC(...): `<type> [DEFAULT|MATERIALIZED] <expr> CODEC(...)`.
+          # Appending codec earlier (as a prior implementation did) produces invalid
+          # DDL for any column that has both a codec and an expression.
+          append_default_or_materialized!(sql, options)
+          append_codec!(sql, options)
+          sql
+        end
+
+        private
+
+        # Appends ` MATERIALIZED <expr>` or ` DEFAULT <expr>` to a column definition.
+        # MATERIALIZED takes precedence: a column carries one kind of expression, not both.
+        def append_default_or_materialized!(sql, options)
+          if options[:materialized]
+            sql << " MATERIALIZED #{quote_default_expression(options[:materialized], options[:column])}"
+          elsif options_include_default?(options)
+            if ::ActiveRecord::version >= Gem::Version.new('8.1')
+              sql << " DEFAULT #{quote_default_expression_for_column_definition(options[:default], options[:column])}"
+            else
+              sql << " DEFAULT #{quote_default_expression(options[:default], options[:column])}"
+            end
           end
           sql
         end
+
+        # Appends ` CODEC(...)`. Must run after append_default_or_materialized! so the
+        # expression precedes the codec, per ClickHouse column grammar.
+        def append_codec!(sql, options)
+          sql << " CODEC(#{options[:codec]})" if options[:codec]
+          sql
+        end
+
+        public
 
         def add_table_options!(create_sql, options)
           opts = options[:options]

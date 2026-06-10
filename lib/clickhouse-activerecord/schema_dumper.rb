@@ -312,7 +312,16 @@ module ClickhouseActiverecord
       spec[:fixed_string] = schema_fixed_string(column)
       spec[:codec] = column.codec.inspect if column.codec
       spec.merge! schema_aggregate_function(column)
-      spec.merge(super).compact
+      spec = spec.merge(super).compact
+
+      # A MATERIALIZED column's expression is surfaced by the base dumper as
+      # :default (it rides on default_function); re-key it to :materialized so it
+      # round-trips as MATERIALIZED rather than being recreated as a plain DEFAULT.
+      if column.respond_to?(:materialized?) && column.materialized? && spec[:default]
+        spec[:materialized] = spec.delete(:default)
+      end
+
+      spec
     end
 
     # Extracts projection definitions from a SHOW CREATE TABLE statement.

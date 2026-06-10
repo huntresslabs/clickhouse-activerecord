@@ -259,8 +259,13 @@ module ActiveRecord
         def new_column_from_field(table_name, field, _definitions)
           column_name, sql_type, default_type, default_expression = field
           type_metadata = fetch_type_metadata(sql_type)
+          materialized = default_type == 'MATERIALIZED'
           default_value = extract_value_from_default(default_expression, default_type)
-          default_function = extract_default_function(default_expression)
+          # A MATERIALIZED expression must always ride through as default_function
+          # so the dumper can re-key it to `materialized:`. extract_default_function
+          # only recognises function-shaped expressions, which would silently drop
+          # expressions like `MATERIALIZED a` or `MATERIALIZED a + 1` on round-trip.
+          default_function = materialized ? default_expression.presence : extract_default_function(default_expression)
           cast_type = lookup_cast_type(sql_type)
           default_value = cast_type.cast(default_value)
 
@@ -268,7 +273,7 @@ module ActiveRecord
           args << cast_type if ::ActiveRecord::version >= Gem::Version.new('8.1')
           args += [default_value, type_metadata, field[1].include?('Nullable'), default_function]
 
-          Clickhouse::Column.new(*args, codec: field[5].presence)
+          Clickhouse::Column.new(*args, codec: field[5].presence, materialized: materialized)
         end
 
         def extract_value_from_default(default_expression, default_type)
