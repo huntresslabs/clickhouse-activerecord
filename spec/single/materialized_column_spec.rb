@@ -8,13 +8,15 @@ RSpec.describe 'MATERIALIZED column support' do
 
   # A column with both a codec and an expression. Before the ordering fix this
   # produced invalid DDL (`<type> CODEC(...) DEFAULT/MATERIALIZED <expr>`), which
-  # failed on creation and made the dumped schema unloadable.
+  # failed on creation and made the dumped schema unloadable. The column type is
+  # incidental (String, to stay portable across ClickHouse versions); what matters
+  # is that it has both a CODEC and a MATERIALIZED expression.
   def create_mat_test
     connection.create_table('mat_test', id: false, options: 'MergeTree ORDER BY tuple()') do |t|
       t.integer :flag, limit: 1, null: false, default: 0
       t.string :body, null: false, default: ''
-      t.json :doc, codec: 'ZSTD(3)', null: false,
-                   materialized: -> { "if(flag = 1, CAST(body, 'JSON'), CAST('{}', 'JSON'))" }
+      t.string :doc, codec: 'ZSTD(3)', null: false,
+                   materialized: -> { "if(flag = 1, upper(body), '')" }
     end
   end
 
@@ -26,7 +28,7 @@ RSpec.describe 'MATERIALIZED column support' do
     it 'emits MATERIALIZED before CODEC' do
       create_mat_test
       ddl = connection.show_create_table('mat_test')
-      expect(ddl).to match(/`doc` JSON MATERIALIZED .+ CODEC\(ZSTD\(3\)\)/)
+      expect(ddl).to match(/`doc` String MATERIALIZED .+ CODEC\(ZSTD\(3\)\)/)
     end
 
     it 'emits a plain DEFAULT before CODEC' do
@@ -45,7 +47,7 @@ RSpec.describe 'MATERIALIZED column support' do
     it 'flags a MATERIALIZED column as materialized and keeps its expression' do
       doc = connection.columns('mat_test').find { |c| c.name == 'doc' }
       expect(doc.materialized?).to be(true)
-      expect(doc.default_function).to include('CAST')
+      expect(doc.default_function).to include('upper(body)')
     end
 
     it 'does not flag a plain DEFAULT column as materialized' do
@@ -64,9 +66,9 @@ RSpec.describe 'MATERIALIZED column support' do
     end
 
     it 'dumps the column as materialized: with its codec, not as default:' do
-      doc_line = dump.lines.find { |l| l.include?('t.json "doc"') }
+      doc_line = dump.lines.find { |l| l.include?('"doc"') }
       expect(doc_line).to include('codec: "ZSTD(3)"')
-      expect(doc_line).to include(%(materialized: -> { "if(flag = 1, CAST(body, 'JSON'), CAST('{}', 'JSON'))" }))
+      expect(doc_line).to include(%(materialized: -> { "if(flag = 1, upper(body), '')" }))
       expect(doc_line).not_to include('default:')
     end
   end
