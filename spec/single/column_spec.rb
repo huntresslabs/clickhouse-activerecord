@@ -38,5 +38,38 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Clickhouse::Column do
 
       expect(a == b).to eql(false)
     end
+
+    it 'is false when the materialized flag does not match' do
+      a = described_class.new(*column_args('created_at', nil, type_metadata, false, 'now()'), materialized: true)
+      b = described_class.new(*column_args('created_at', nil, type_metadata, false, 'now()'), materialized: false)
+
+      expect(a == b).to eql(false)
+    end
+  end
+
+  describe '#materialized?' do
+    let(:type_metadata) do
+      instance_double(
+        ActiveRecord::ConnectionAdapters::SqlTypeMetadata,
+        sql_type: 'String', type: :string, limit: nil, precision: nil, scale: nil
+      )
+    end
+    let(:cast_type) { double('cast_type', mutable?: false, deserialize: nil) }
+    def column_args(name, default, type_meta, null, default_fn)
+      args = [name]
+      args << cast_type if ActiveRecord.version >= Gem::Version.new('8.1')
+      args += [default, type_meta, null, default_fn]
+      args
+    end
+
+    it 'defaults to false' do
+      column = described_class.new(*column_args('col', nil, type_metadata, false, nil))
+      expect(column.materialized?).to be(false)
+    end
+
+    it 'is true when constructed as materialized' do
+      column = described_class.new(*column_args('col', nil, type_metadata, false, 'now()'), materialized: true)
+      expect(column.materialized?).to be(true)
+    end
   end
 end
