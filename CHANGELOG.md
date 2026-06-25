@@ -1,3 +1,7 @@
+### Unreleased
+
+* Add `joins_final` to apply the `FINAL` modifier to joined tables (`INNER JOIN <table> FINAL ON ...`), not just the primary `FROM` table
+
 ### Version 1.6.7 (Mar 5, 2026)
 
 * Fix insert with default values in Ruby 4.0 and Rails 8.1
