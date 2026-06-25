@@ -1,3 +1,7 @@
+### Unreleased
+
+* Add `joins_final` to apply the `FINAL` modifier to joined tables (`INNER JOIN <table> FINAL ON ...`), not just the primary `FROM` table
+
 ### Version 1.6.6 (Feb 16, 2026)
 
 * Fix error: EOFError (end of file reached)

@@ -9,6 +9,9 @@ RSpec.describe 'Model', :migrations do
   class Model < ActiveRecord::Base
     self.table_name = 'sample'
     has_many :joins, class_name: 'ModelJoin', primary_key: 'event_name'
+    # Self-referential association to the sample table (a ReplacingMergeTree,
+    # which supports FINAL) so the FINAL join can actually be executed.
+    has_many :twins, class_name: 'Model', foreign_key: 'event_name', primary_key: 'event_name'
   end
   class ModelPk < ActiveRecord::Base
     self.table_name = 'sample'
@@ -422,6 +425,49 @@ RSpec.describe 'Model', :migrations do
       it 'works with JOINs' do
         sql = Model.final.joins(:joins).where(date: '2023-07-21').to_sql
         expect(sql).to eq('SELECT sample.* FROM sample FINAL INNER JOIN joins ON joins.model_id = sample.event_name WHERE sample.date = \'2023-07-21\'')
+      end
+    end
+
+    describe '#joins_final' do
+      it 'adds FINAL to the joined table' do
+        sql = Model.joins_final(:joins).to_sql
+        expect(sql).to eq('SELECT sample.* FROM sample INNER JOIN joins FINAL ON joins.model_id = sample.event_name')
+      end
+
+      it 'applies FINAL to both the FROM table and the join when combined with #final' do
+        sql = Model.final.joins_final(:joins).where(date: '2023-07-21').to_sql
+        expect(sql).to eq('SELECT sample.* FROM sample FINAL INNER JOIN joins FINAL ON joins.model_id = sample.event_name WHERE sample.date = \'2023-07-21\'')
+      end
+
+      it 'does not duplicate a join already added via #joins' do
+        sql = Model.joins(:joins).joins_final(:joins).to_sql
+        expect(sql).to eq('SELECT sample.* FROM sample INNER JOIN joins FINAL ON joins.model_id = sample.event_name')
+      end
+
+      it 'does not add FINAL to the FROM table on its own' do
+        sql = Model.joins_final(:joins).to_sql
+        expect(sql).not_to match(/FROM sample FINAL/)
+      end
+
+      it 'can be removed with unscope, keeping the plain join' do
+        sql = Model.joins_final(:joins).unscope(:joins_final).to_sql
+        expect(sql).to eq('SELECT sample.* FROM sample INNER JOIN joins ON joins.model_id = sample.event_name')
+      end
+
+      it 'is chainable (returns a relation)' do
+        expect(Model.joins_final(:joins)).to be_a(ActiveRecord::Relation)
+      end
+
+      it 'executes against ClickHouse and merges the FINAL-joined table' do
+        Model.create!(date: date, event_name: 'final-join')
+        Model.create!(date: date, event_name: 'final-join')
+
+        relation = Model.final.joins_final(:twins).where(sample: { event_name: 'final-join' })
+        expect(relation.to_sql).to include('FINAL ON')
+        # The sample table is a ReplacingMergeTree: FINAL dedups the two rows to
+        # one on both the FROM side and the self-joined side, so the join
+        # produces a single row.
+        expect(relation.count).to eq(1)
       end
     end
 
