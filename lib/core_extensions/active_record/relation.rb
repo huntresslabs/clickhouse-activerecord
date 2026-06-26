@@ -120,6 +120,36 @@ module CoreExtensions
         self
       end
 
+      # Like #joins_final, but adds the join(s) as LEFT OUTER JOINs (via
+      # #left_outer_joins) and renders FINAL on the joined table. Use this when
+      # the joined rows must be preserved even with no match (e.g. an optional
+      # catalog lookup) while still merging the joined table with FINAL.
+      # For example:
+      #
+      #   AppControlEvent.left_joins_final(:espm_binary)
+      #   # SELECT ... FROM espm_app_control_events
+      #   #   LEFT OUTER JOIN espm_binaries FINAL ON ...
+      #
+      # Each argument is an association name and is added as a left outer join
+      # (like #left_outer_joins); FINAL is then rendered on the joined table.
+      # Joins are matched by table name, so if the same table is joined more
+      # than once every join of that table receives FINAL. An
+      # <tt>ActiveRecord::ActiveRecordError</tt> will be raised if the database
+      # is not ClickHouse.
+      #
+      # @param [Array] args
+      def left_joins_final(*args)
+        spawn.left_joins_final!(*args)
+      end
+
+      # @param [Array] args
+      def left_joins_final!(*args)
+        check_command!('FINAL')
+        left_outer_joins!(*args)
+        self.joins_final_values |= args
+        self
+      end
+
       def joins_final_values
         @values.fetch(:joins_final, ::ActiveRecord::QueryMethods::FROZEN_EMPTY_ARRAY)
       end
