@@ -507,6 +507,14 @@ RSpec.describe 'Model', :migrations do
         expect(Model.left_joins_final(:joins)).to be_a(ActiveRecord::Relation)
       end
 
+      it 'collapses to a single FINAL join when the same association is also added via #joins_final' do
+        # ActiveRecord deduplicates an association present in both joins and
+        # left_outer_joins into one INNER JOIN (INNER wins), and the shared
+        # joins_final_values store dedups via |=, so FINAL is applied once.
+        sql = Model.joins_final(:joins).left_joins_final(:joins).to_sql
+        expect(sql).to eq('SELECT sample.* FROM sample INNER JOIN joins FINAL ON joins.model_id = sample.event_name')
+      end
+
       it 'executes against ClickHouse and merges the FINAL-joined table' do
         Model.create!(date: date, event_name: 'left-final-join')
         Model.create!(date: date, event_name: 'left-final-join')
