@@ -39,9 +39,9 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Clickhouse::Column do
       expect(a == b).to eql(false)
     end
 
-    it 'is false when the materialized flag does not match' do
-      a = described_class.new(*column_args('created_at', nil, type_metadata, false, 'now()'), materialized: true)
-      b = described_class.new(*column_args('created_at', nil, type_metadata, false, 'now()'), materialized: false)
+    it 'is false when the default_kind does not match' do
+      a = described_class.new(*column_args('created_at', nil, type_metadata, false, 'now()'), default_kind: 'MATERIALIZED')
+      b = described_class.new(*column_args('created_at', nil, type_metadata, false, 'now()'), default_kind: 'DEFAULT')
 
       expect(a == b).to eql(false)
     end
@@ -68,7 +68,7 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Clickhouse::Column do
     end
 
     it 'is true when constructed as materialized' do
-      column = described_class.new(*column_args('col', nil, type_metadata, false, 'now()'), materialized: true)
+      column = described_class.new(*column_args('col', nil, type_metadata, false, 'now()'), default_kind: 'MATERIALIZED')
       expect(column.materialized?).to be(true)
     end
   end

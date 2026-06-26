@@ -10,8 +10,7 @@ module Arel
       end
 
       def aggregate(name, o, collector)
-        # replacing function name for materialized view
-        if o.expressions.first && o.expressions.first != '*' && !o.expressions.first.is_a?(String) && o.expressions.first.relation&.is_view
+        if o.expressions.first && o.expressions.first != '*' && !o.expressions.first.is_a?(String) && o.expressions.first.respond_to?(:relation) && o.expressions.first.relation&.is_view
           super("#{name.downcase}Merge", o, collector)
         else
           super
@@ -110,7 +109,7 @@ module Arel
         collector << "SETTINGS "
         o.expr.each_with_index do |(key, value), i|
           collector << ", " if i > 0
-          collector << key.to_s.gsub(/\W+/, "")
+          collector << sanitize_as_setting_name(key).to_s
           collector << " = "
           collector << sanitize_as_setting_value(value)
         end
@@ -156,7 +155,7 @@ module Arel
 
       def sanitize_as_setting_name(value)
         return value if Arel::Nodes::SqlLiteral === value
-        @connection.sanitize_as_setting_name(value)
+        value.to_s.gsub(/\W+/, "")
       end
 
       private
