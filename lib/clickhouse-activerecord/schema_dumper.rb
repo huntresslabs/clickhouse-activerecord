@@ -117,7 +117,7 @@ module ClickhouseActiverecord
           end
         end
 
-        indexes = sql.scan(/INDEX \S+ \S+ TYPE .*? GRANULARITY \d+/)
+        indexes = sql.scan(/INDEX \S+ .+? TYPE .*? GRANULARITY \d+/)
         projections = parse_projections(sql)
         if indexes.any? || projections.any?
           tbl.puts ''
