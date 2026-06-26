@@ -1,6 +1,7 @@
 ### Unreleased
 
 * Add `joins_final` to apply the `FINAL` modifier to joined tables (`INNER JOIN <table> FINAL ON ...`), not just the primary `FROM` table
+* Add `left_joins_final`, the `LEFT OUTER JOIN <table> FINAL ON ...` counterpart of `joins_final`, for FINAL-merged optional joins
 
 ### Version 1.6.6 (Feb 16, 2026)
 
