@@ -67,6 +67,7 @@ module ActiveRecord
     module ClassMethods
       delegate :final, :final!,
                :joins_final, :joins_final!,
+               :left_joins_final, :left_joins_final!,
                :group_by_grouping_sets, :group_by_grouping_sets!,
                :settings, :settings!,
                :window, :window!,
