@@ -38,8 +38,13 @@ module ClickhouseActiverecord
         stream.puts "  # TABLE: #{table}"
         sql = @connection.show_create_table(table)
         if sql
-          stream.puts "  # SQL: #{sql.gsub(/ENGINE = Replicated(.*?)\('[^']+',\s*'[^']+',?\s?([^)]*)?\)/,
-                                           'ENGINE = \\1(\\2)')}"
+          # Normalize environment-specific bits so the comment does not churn across
+          # databases: strip the Replicated zk paths and substitute the literal
+          # database name in Buffer engines with the same token used by the DSL below.
+          comment_sql = sql
+                        .gsub(/ENGINE = Replicated(.*?)\('[^']+',\s*'[^']+',?\s?([^)]*)?\)/, 'ENGINE = \\1(\\2)')
+                        .gsub(/Buffer\('[^']+'/, 'Buffer(\'#{connection.database}\'')
+          stream.puts "  # SQL: #{comment_sql}"
         end
         # super(table.gsub(/^\.inner\./, ''), stream)
 
