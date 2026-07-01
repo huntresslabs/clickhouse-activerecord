@@ -181,7 +181,9 @@ module ClickhouseActiverecord
     def schema_limit(column)
       if column.type == :float
         inner = aggregate_function_inner_type(column.sql_type) || column.sql_type
-        return 4 if inner == 'Float32'
+        # Float32 is the default mapping for `t.float` (NATIVE_DATABASE_TYPES[:float]),
+        # so emit no limit for it. Only Float64 needs an explicit limit to round-trip.
+        return nil if inner == 'Float32'
 
         8 if inner == 'Float64'
       else
