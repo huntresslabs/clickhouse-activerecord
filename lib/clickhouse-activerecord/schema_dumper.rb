@@ -165,11 +165,11 @@ module ClickhouseActiverecord
     end
 
     def schema_array(column)
-      column.array || nil
+      column.array ? true : nil
     end
 
     def schema_map(column)
-      if column.sql_type =~ /Map\(([^,]+),\s*Array\(/
+      if column.sql_type =~ /Map\([^,]+,\s*Array\(/
         return :array
       end
 
