@@ -224,8 +224,15 @@ module ActiveRecord
           end
         end
 
+        # Precision is the first parenthesised integer. The second argument may be
+        # a scale digit (Decimal(P, S)) OR a non-numeric argument such as a
+        # timezone (DateTime64(N, 'UTC')); either way it must not defeat the match.
+        # The previous `(,\s?\d+)?\)` form required the paren to close right after
+        # the number or after a second *digit*, so `DateTime64(3, 'UTC')` failed to
+        # match entirely and precision came back nil — silently dumping the column
+        # as a plain DateTime and dropping its sub-second precision on schema load.
         def extract_precision(sql_type)
-          $1.to_i if sql_type =~ /\((\d+)(,\s?\d+)?\)/
+          $1.to_i if sql_type =~ /\((\d+)\s*[,)]/
         end
 
         def initialize_type_map(m) # :nodoc:
