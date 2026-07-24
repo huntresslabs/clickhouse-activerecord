@@ -120,10 +120,10 @@ RSpec.describe ClickhouseActiverecord::SchemaDumper, :migrations do
         ).to_stdout_from_any_process
       end
 
-      it 'dumps a timezone-qualified DateTime as a plain datetime (no precision)' do
+      it 'dumps a timezone-qualified DateTime as a plain datetime (no sub-second precision)' do
         expect { subject }.to output(
           satisfy do |schema|
-            expect(schema).to match(/t\.datetime "ts_utc", null: false/)
+            expect(schema).to match(/t\.datetime "ts_utc", precision: nil, null: false/)
           end
         ).to_stdout_from_any_process
       end
