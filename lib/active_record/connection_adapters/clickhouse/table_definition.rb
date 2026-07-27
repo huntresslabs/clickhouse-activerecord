@@ -46,7 +46,7 @@ module ActiveRecord
           unsigned = options[:unsigned]
           unsigned = true if unsigned.nil?
 
-          kind = :uint32 # default
+          kind = unsigned ? :uint32 : :int32 # default
 
           if options[:limit]
             if unsigned

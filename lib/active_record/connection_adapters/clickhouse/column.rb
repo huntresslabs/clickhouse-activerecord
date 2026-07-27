@@ -1,13 +1,26 @@
 module ActiveRecord
   module ConnectionAdapters
     module Clickhouse
-      class Column < ActiveRecord::ConnectionAdapters::Column
-        attr_reader :codec
+      DescribedColumn =
+        Data.define(:name, :sql_type, :default_type, :default_expression, :comment, :codec) do
+          def ephemeral?
+            default_type.to_s.downcase == 'ephemeral'
+          end
+        end
 
-        def initialize(*, codec: nil, materialized: false, **)
+      class Column < ActiveRecord::ConnectionAdapters::Column
+        attr_reader :codec, :default_kind
+
+        def initialize(*, codec: nil, default_kind: nil, **)
           super
           @codec = codec
-          @materialized = materialized
+          @default_kind = ActiveSupport::StringInquirer.new(default_kind.to_s.downcase.presence || 'none')
+        end
+
+        # True when the column is a virtual (computed) column that must be
+        # excluded from INSERT statements: MATERIALIZED and ALIAS columns.
+        def virtual?
+          default_kind.materialized? || default_kind.alias?
         end
 
         # True when the column's expression is a MATERIALIZED expression (as
@@ -15,14 +28,14 @@ module ActiveRecord
         # +default_function+; this flag records which kind it is so the schema
         # dumper can round-trip it as MATERIALIZED rather than DEFAULT.
         def materialized?
-          @materialized
+          default_kind.materialized?
         end
 
         def ==(other)
           other.is_a?(ActiveRecord::ConnectionAdapters::Clickhouse::Column) &&
             super &&
             codec == other.codec &&
-            materialized? == other.materialized?
+            default_kind == other.default_kind
         end
         alias eql? ==
 
