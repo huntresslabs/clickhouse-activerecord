@@ -113,6 +113,10 @@ module ClickhouseActiverecord
                 colspec = prepare_column_options(column).slice(:null, :default, :codec)
                 tbl.print ", #{format_colspec(colspec)}" if colspec.present?
               end
+            elsif column.sql_type.match?(/DateTime64\(\d+,\s*'/)
+              tbl.print "    t.column #{name}, #{column.sql_type.inspect}"
+              colspec = prepare_column_options(column).slice(:null, :default, :codec)
+              tbl.print ", #{format_colspec(colspec)}" if colspec.present?
             else
               type, colspec = column_spec(column)
               tbl.print "    t.#{type} #{name}"
