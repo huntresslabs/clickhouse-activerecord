@@ -28,6 +28,10 @@ module ActiveRecord
             return sql
           end
 
+          sql.sub!(/(?<=\s)DateTime(64)?(?=\s|\z)/) do
+            args = [($1 && options[:precision]), (options[:timezone] && "'#{options[:timezone]}'")].compact
+            args.any? ? "DateTime#{$1}(#{args.join(', ')})" : $&
+          end
           if options[:value]
             sql.gsub!(/\s+(.*)/, " \\1(#{options[:value]})")
           end

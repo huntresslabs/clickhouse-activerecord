@@ -225,7 +225,7 @@ module ActiveRecord
         end
 
         def extract_precision(sql_type)
-          $1.to_i if sql_type =~ /\((\d+)(,\s?\d+)?\)/
+          $1.to_i if sql_type =~ /\((\d+)(,\s?(\d+|'[^']*'))?\)/
         end
 
         def initialize_type_map(m) # :nodoc:

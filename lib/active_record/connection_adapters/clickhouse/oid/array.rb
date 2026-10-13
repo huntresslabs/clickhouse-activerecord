@@ -17,6 +17,7 @@ module ActiveRecord
                        else
                          :string
             end
+            super(limit: @subtype == :integer ? ClickhouseAdapter.extract_limit(sql_type) : nil)
           end
 
           def type
