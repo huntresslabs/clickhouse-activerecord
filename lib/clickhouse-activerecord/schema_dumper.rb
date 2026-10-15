@@ -205,7 +205,7 @@ module ClickhouseActiverecord
     end
 
     def schema_array(column)
-      depth = column.sql_type.scan('Array(').size
+      depth = column.sql_type.scan(/(?<!\w)Array\(/).size
       depth > 1 ? depth : (true if depth == 1)
     end
 

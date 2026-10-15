@@ -56,6 +56,15 @@ RSpec.describe 'Schema dump round-trip' do
     it_behaves_like 'a lossless round trip'
   end
 
+  context 'with aggregate functions whose name contains Array' do
+    let(:ddl) do
+      'CREATE TABLE rt_test (`a` AggregateFunction(groupArray(10), Array(String)), `b` AggregateFunction(groupArray, String)) ' \
+        'ENGINE = AggregatingMergeTree ORDER BY tuple()'
+    end
+
+    it_behaves_like 'a lossless round trip'
+  end
+
   context 'with a Nested column of mixed sub-column types' do
     let(:ddl) do
       'CREATE TABLE rt_test (`id` String, `items` Nested(`name` String, `kind` LowCardinality(String), `tags` Array(String), `ok` Bool), ' \
