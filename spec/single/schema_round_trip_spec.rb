@@ -45,7 +45,7 @@ RSpec.describe 'Schema dump round-trip' do
   end
 
   context 'with Bool columns' do
-    let(:ddl) { 'CREATE TABLE rt_test (`a` Bool, `b` Array(Bool)) ENGINE = MergeTree ORDER BY tuple()' }
+    let(:ddl) { 'CREATE TABLE rt_test (`a` Bool, `b` Array(Bool), `c` Array(Nullable(Bool))) ENGINE = MergeTree ORDER BY tuple()' }
 
     it_behaves_like 'a lossless round trip'
   end

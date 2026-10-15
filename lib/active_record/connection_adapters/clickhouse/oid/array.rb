@@ -8,7 +8,7 @@ module ActiveRecord
 
           def initialize(sql_type)
             @subtype = case sql_type
-                       when /Array\(Bool\)/
+                       when /Array\((Nullable\()?Bool\b/
                          :boolean
                        when /U?Int\d+/
                          :integer
