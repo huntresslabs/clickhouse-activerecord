@@ -58,9 +58,6 @@ module ClickhouseActiverecord
       begin
         tbl = StringIO.new
 
-        # first dump primary key column
-        pk = @connection.primary_key(table)
-
         tbl.print "  create_table #{remove_prefix_and_suffix(table).inspect}"
 
         unless simple
@@ -100,7 +97,6 @@ module ClickhouseActiverecord
               raise StandardError,
                     "Unknown type '#{column.sql_type}' for column '#{column.name}'"
             end
-            next if column.name == pk && column.name == 'id'
 
             name = column.name.inspect
             if column.sql_type.match?(/^(Simple)?AggregateFunction/)
@@ -209,7 +205,8 @@ module ClickhouseActiverecord
     end
 
     def schema_array(column)
-      (column.sql_type =~ /Array\(/).nil? ? nil : true
+      depth = column.sql_type.scan(/(?<!\w)Array\(/).size
+      depth > 1 ? depth : (true if depth == 1)
     end
 
     def schema_map(column)

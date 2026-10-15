@@ -45,7 +45,7 @@ module ActiveRecord
             sql.gsub!(/\s+(.*)/, ' LowCardinality(\1)')
           end
           if options[:array]
-            sql.gsub!(/\s+(.*)/, ' Array(\1)')
+            (options[:array] == true ? 1 : options[:array]).times { sql.gsub!(/\s+(.*)/, ' Array(\1)') }
           end
           if options[:map] == :array
             sql.gsub!(/\s+(.*)/, ' Map(String, Array(\1))')
