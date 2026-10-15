@@ -44,6 +44,7 @@ module ClickhouseActiverecord
           comment_sql = sql
                         .gsub(/ENGINE = Replicated(.*?)\('[^']+',\s*'[^']+',?\s?([^)]*)?\)/, 'ENGINE = \\1(\\2)')
                         .gsub(/Buffer\('[^']+'/, 'Buffer(\'#{connection.database}\'')
+                        .gsub("Merge('#{@connection.database}'", 'Merge(\'#{connection.database}\'')
           stream.puts "  # SQL: #{comment_sql}"
         end
         # super(table.gsub(/^\.inner\./, ''), stream)
@@ -85,6 +86,7 @@ module ClickhouseActiverecord
           if table_options.present?
             table_options = format_options(table_options)
             table_options.gsub!(/Buffer\('[^']+'/, 'Buffer(\'#{connection.database}\'')
+            table_options.gsub!("Merge('#{@connection.database}'", 'Merge(\'#{connection.database}\'')
             tbl.print ", #{table_options}"
           end
         end
@@ -100,7 +102,7 @@ module ClickhouseActiverecord
             end
             next if column.name == pk && column.name == 'id'
 
-            name = column.name =~ /\./ ? "\"`#{column.name}`\"" : column.name.inspect
+            name = column.name.inspect
             if column.sql_type.match?(/^(Simple)?AggregateFunction/)
               dsl_type = aggregate_function_dsl_type(column.sql_type)
               if dsl_type
@@ -194,6 +196,12 @@ module ClickhouseActiverecord
       end
     end
 
+    def schema_precision(column)
+      return super unless column.type == :datetime
+
+      column.precision&.inspect || 'nil'
+    end
+
     def schema_unsigned(column)
       return nil unless column.type == :integer && !simple
 
@@ -217,6 +225,10 @@ module ClickhouseActiverecord
     def schema_fixed_string(column)
       match = column.sql_type.match(/FixedString\((\d+)\)/)
       match ? match[1].to_i : nil
+    end
+
+    def schema_timezone(column)
+      column.sql_type[/DateTime(?:64)?\((?:\d+,\s*)?'([^']+)'\)/, 1]&.inspect
     end
 
     def schema_aggregate_function(column)
@@ -315,6 +327,7 @@ module ClickhouseActiverecord
       spec[:array] = nil if spec[:map] == :array
       spec[:low_cardinality] = schema_low_cardinality(column)
       spec[:fixed_string] = schema_fixed_string(column)
+      spec[:timezone] = schema_timezone(column)
       spec[:codec] = column.codec.inspect if column.codec
       spec.merge! schema_aggregate_function(column)
       spec = spec.merge(super).compact
