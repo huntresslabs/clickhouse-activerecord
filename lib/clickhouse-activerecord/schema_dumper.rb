@@ -50,7 +50,7 @@ module ClickhouseActiverecord
         # super(table.gsub(/^\.inner\./, ''), stream)
 
         # detect view table
-        view_match = sql.match(/^CREATE\s+(MATERIALIZED\s+)?VIEW\s+\S+\s+(?:TO (\S+))?/)
+        view_match = sql.match(/^CREATE\s+(MATERIALIZED\s+)?VIEW\s+\S+\s+(?:REFRESH (.+?) (?=TO |\(|ENGINE |DEFINER |AS ))?(?:TO (\S+))?/)
       end
 
       # Copy from original dumper
@@ -64,7 +64,8 @@ module ClickhouseActiverecord
           # Add materialize flag
           tbl.print ', view: true' if view_match
           tbl.print ', materialized: true' if view_match && view_match[1].presence
-          tbl.print ", to: \"#{view_match[2]}\"" if view_match && view_match[2].presence
+          tbl.print ", refresh: #{view_match[2].inspect}" if view_match && view_match[2].presence
+          tbl.print ", to: \"#{view_match[3]}\"" if view_match && view_match[3].presence
         end
 
         if (id = columns.detect { |c| c.name == 'id' })

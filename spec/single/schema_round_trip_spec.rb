@@ -100,4 +100,56 @@ RSpec.describe 'Schema dump round-trip' do
       expect(dump.lines.grep(/rt_test/).join).not_to include("'#{connection.database}'")
     end
   end
+
+  context 'with materialized views' do
+    let(:select) { 'SELECT account_id, toDate(created_at) AS day FROM rt_src' }
+    let(:create_block) { dump[/  create_table "rt_mv".*?\n  end/m] }
+
+    before do
+      connection.execute('CREATE TABLE rt_src (`account_id` UInt32, `created_at` DateTime) ENGINE = MergeTree ORDER BY account_id')
+      connection.execute('CREATE TABLE rt_dst (`account_id` UInt32, `day` Date) ENGINE = MergeTree ORDER BY account_id')
+    end
+
+    after { %w[rt_mv rt_dst rt_src].each { |table| connection.execute("DROP TABLE IF EXISTS #{table}") } }
+
+    shared_examples 'a lossless refreshable round trip' do |refresh|
+      it 'recreates an identical view from its dump' do
+        connection.create_table 'rt_mv', view: true, materialized: true, refresh: refresh, to: 'rt_dst', id: false, as: select.dup
+        original = connection.show_create_table('rt_mv')
+
+        expect(create_block).to eq(
+          %(  create_table "rt_mv", view: true, materialized: true, refresh: #{refresh.inspect}, to: "rt_dst", id: false, as: "#{select}", force: :cascade do |t|\n  end)
+        )
+
+        connection.execute('DROP TABLE rt_mv')
+        ActiveRecord::Migration.suppress_messages { ActiveRecord::Schema.new.instance_eval(create_block) }
+
+        expect(connection.show_create_table('rt_mv')).to eq(original)
+      end
+    end
+
+    context 'when refreshable with APPEND' do
+      it_behaves_like 'a lossless refreshable round trip', 'EVERY 1 DAY OFFSET 8 HOUR APPEND'
+    end
+
+    context 'when refreshable without APPEND' do
+      it_behaves_like 'a lossless refreshable round trip', 'EVERY 1 DAY OFFSET 8 HOUR'
+    end
+
+    it 'dumps a non-refreshable TO view unchanged' do
+      connection.execute("CREATE MATERIALIZED VIEW rt_mv TO rt_dst AS #{select}")
+
+      expect(create_block).to eq(
+        %(  create_table "rt_mv", view: true, materialized: true, to: "rt_dst", id: false, as: "#{select}", force: :cascade do |t|\n  end)
+      )
+    end
+
+    it 'dumps a standalone view unchanged' do
+      connection.execute("CREATE MATERIALIZED VIEW rt_mv ENGINE = MergeTree ORDER BY account_id AS #{select}")
+
+      expect(create_block).to eq(
+        %(  create_table "rt_mv", view: true, materialized: true, id: false, options: "MergeTree ORDER BY account_id SETTINGS index_granularity = 8192", as: "#{select}", force: :cascade do |t|\n  end)
+      )
+    end
+  end
 end

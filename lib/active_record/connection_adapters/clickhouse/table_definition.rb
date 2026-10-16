@@ -5,7 +5,7 @@ module ActiveRecord
     module Clickhouse
       class TableDefinition < ActiveRecord::ConnectionAdapters::TableDefinition
 
-        attr_reader :view, :materialized, :if_not_exists, :to, :projections
+        attr_reader :view, :materialized, :if_not_exists, :to, :refresh, :projections
 
         def initialize(
             conn,
@@ -18,6 +18,7 @@ module ActiveRecord
             view: false,
             materialized: false,
             to: nil,
+            refresh: nil,
             **
           )
           @conn = conn
@@ -35,6 +36,7 @@ module ActiveRecord
           @view = view || materialized
           @materialized = materialized
           @to = to
+          @refresh = refresh
         end
 
         def projection(name, query)
