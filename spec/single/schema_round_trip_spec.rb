@@ -110,7 +110,7 @@ RSpec.describe 'Schema dump round-trip' do
       connection.execute('CREATE TABLE rt_dst (`account_id` UInt32, `day` Date) ENGINE = MergeTree ORDER BY account_id')
     end
 
-    after { %w[rt_mv rt_dst rt_src].each { |table| connection.execute("DROP TABLE IF EXISTS #{table}") } }
+    after { ['rt_mv', '`rt_dep (source)`', 'rt_dep_dst', 'rt_dst', 'rt_src'].each { |table| connection.execute("DROP TABLE IF EXISTS #{table}") } }
 
     shared_examples 'a lossless refreshable round trip' do |refresh|
       it 'recreates an identical view from its dump' do
@@ -136,6 +136,15 @@ RSpec.describe 'Schema dump round-trip' do
 
       context 'when refreshable without APPEND' do
         it_behaves_like 'a lossless refreshable round trip', 'EVERY 1 DAY OFFSET 8 HOUR'
+      end
+
+      context 'when refreshable with a quoted DEPENDS ON name' do
+        before do
+          connection.execute('CREATE TABLE rt_dep_dst (`account_id` UInt32, `day` Date) ENGINE = MergeTree ORDER BY account_id')
+          connection.execute("CREATE MATERIALIZED VIEW `rt_dep (source)` REFRESH EVERY 1 DAY TO rt_dep_dst AS #{select}")
+        end
+
+        it_behaves_like 'a lossless refreshable round trip', 'EVERY 1 DAY DEPENDS ON `rt_dep (source)`'
       end
     end
 

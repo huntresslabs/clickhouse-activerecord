@@ -50,7 +50,7 @@ module ClickhouseActiverecord
         # super(table.gsub(/^\.inner\./, ''), stream)
 
         # detect view table
-        view_match = sql.match(/^CREATE\s+(MATERIALIZED\s+)?VIEW\s+\S+\s+(?:REFRESH (.+?) (?=TO |\(|ENGINE |DEFINER |AS ))?(?:TO (\S+))?/)
+        view_match = sql.match(/^CREATE\s+(MATERIALIZED\s+)?VIEW\s+\S+\s+(?:REFRESH ((?:`[^`]*`|[^`])+?) (?=TO |\(|ENGINE |DEFINER |AS ))?(?:TO (\S+))?/)
       end
 
       # Copy from original dumper
