@@ -128,6 +128,7 @@ RSpec.describe 'Schema dump round-trip' do
       end
     end
 
+    # Refreshable views are experimental before ClickHouse 24.10; Gem::Version because '24.10'.to_f == 24.1
     if Gem::Version.new(ActiveRecord::Base.connection.server_version) >= Gem::Version.new('24.10')
       context 'when refreshable with APPEND' do
         it_behaves_like 'a lossless refreshable round trip', 'EVERY 1 DAY OFFSET 8 HOUR APPEND'
