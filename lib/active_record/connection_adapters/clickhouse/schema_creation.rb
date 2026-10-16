@@ -149,6 +149,7 @@ module ActiveRecord
           create_sql << "IF NOT EXISTS " if o.if_not_exists
           create_sql << "#{quote_table_name(o.name)} "
           add_as_clause!(create_sql, o) if o.as && !o.view
+          create_sql << "REFRESH #{o.refresh} " if o.materialized && o.refresh
           add_to_clause!(create_sql, o) if o.materialized
 
           statements = o.columns.map { |c| accept c }
