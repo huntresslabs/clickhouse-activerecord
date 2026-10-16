@@ -72,4 +72,49 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Clickhouse::Column do
       expect(column.materialized?).to be(true)
     end
   end
+
+  describe '#array' do
+    let(:connection) { ActiveRecord::Base.connection }
+
+    before do
+      connection.execute(<<~SQL)
+        CREATE TABLE array_test (
+          `plain` String,
+          `count` UInt64,
+          `nullable` Nullable(String),
+          `low_card` LowCardinality(String),
+          `tags` Array(LowCardinality(String)),
+          `ids` Array(UInt64),
+          `flags` Array(Bool),
+          `nested_array` Array(Array(String)),
+          `items` Nested(`name` String, `controls` Array(String)),
+          `uniq_ids` SimpleAggregateFunction(groupUniqArrayArray, Array(UInt64)),
+          `group_state` AggregateFunction(groupArray, String),
+          `attrs` Map(String, Array(String))
+        ) ENGINE = MergeTree ORDER BY tuple()
+      SQL
+    end
+
+    after { connection.execute('DROP TABLE IF EXISTS array_test') }
+
+    it 'is true for Array columns, Nested sub-columns and simple aggregates over arrays, and false otherwise' do
+      arrays = connection.columns('array_test').to_h { [it.name, [it.array, it.array?]] }
+
+      expect(arrays).to eq(
+        'plain' => [false, false],
+        'count' => [false, false],
+        'nullable' => [false, false],
+        'low_card' => [false, false],
+        'tags' => [true, true],
+        'ids' => [true, true],
+        'flags' => [true, true],
+        'nested_array' => [true, true],
+        'items.name' => [true, true],
+        'items.controls' => [true, true],
+        'uniq_ids' => [true, true],
+        'group_state' => [false, false],
+        'attrs' => [false, false]
+      )
+    end
+  end
 end

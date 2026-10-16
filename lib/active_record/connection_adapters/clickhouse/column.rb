@@ -18,6 +18,11 @@ module ActiveRecord
           @materialized
         end
 
+        def array
+          sql_type.start_with?('Array(') || sql_type.match?(/\ASimpleAggregateFunction\(.+,\s*Array\(.*\)\)\z/)
+        end
+        alias array? array
+
         def ==(other)
           other.is_a?(ActiveRecord::ConnectionAdapters::Clickhouse::Column) &&
             super &&
