@@ -98,7 +98,7 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Clickhouse::Column do
     after { connection.execute('DROP TABLE IF EXISTS array_test') }
 
     it 'is true for Array columns, Nested sub-columns and simple aggregates over arrays, and false otherwise' do
-      arrays = connection.columns('array_test').to_h { [it.name, [it.array, it.array?]] }
+      arrays = connection.columns('array_test').to_h { |column| [column.name, [column.array, column.array?]] }
 
       expect(arrays).to eq(
         'plain' => [false, false],
