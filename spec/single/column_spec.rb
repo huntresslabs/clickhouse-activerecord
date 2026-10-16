@@ -89,6 +89,8 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Clickhouse::Column do
           `nested_array` Array(Array(String)),
           `items` Nested(`name` String, `controls` Array(String)),
           `uniq_ids` SimpleAggregateFunction(groupUniqArrayArray, Array(UInt64)),
+          `last_map` SimpleAggregateFunction(anyLast, Map(String, Array(String))),
+          `last_tuple` SimpleAggregateFunction(anyLast, Tuple(String, Array(UInt8))),
           `group_state` AggregateFunction(groupArray, String),
           `attrs` Map(String, Array(String))
         ) ENGINE = MergeTree ORDER BY tuple()
@@ -112,6 +114,8 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Clickhouse::Column do
         'items.name' => [true, true],
         'items.controls' => [true, true],
         'uniq_ids' => [true, true],
+        'last_map' => [false, false],
+        'last_tuple' => [false, false],
         'group_state' => [false, false],
         'attrs' => [false, false]
       )

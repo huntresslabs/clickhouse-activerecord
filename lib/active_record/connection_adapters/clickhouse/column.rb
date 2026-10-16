@@ -19,7 +19,7 @@ module ActiveRecord
         end
 
         def array
-          sql_type.start_with?('Array(') || sql_type.match?(/\ASimpleAggregateFunction\(.+,\s*Array\(.*\)\)\z/)
+          sql_type.start_with?('Array(') || sql_type.match?(/\ASimpleAggregateFunction\([^,()]*(?:\([^()]*\))?,\s*Array\(/)
         end
         alias array? array
 
