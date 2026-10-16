@@ -128,12 +128,14 @@ RSpec.describe 'Schema dump round-trip' do
       end
     end
 
-    context 'when refreshable with APPEND' do
-      it_behaves_like 'a lossless refreshable round trip', 'EVERY 1 DAY OFFSET 8 HOUR APPEND'
-    end
+    if Gem::Version.new(ActiveRecord::Base.connection.server_version) >= Gem::Version.new('24.10')
+      context 'when refreshable with APPEND' do
+        it_behaves_like 'a lossless refreshable round trip', 'EVERY 1 DAY OFFSET 8 HOUR APPEND'
+      end
 
-    context 'when refreshable without APPEND' do
-      it_behaves_like 'a lossless refreshable round trip', 'EVERY 1 DAY OFFSET 8 HOUR'
+      context 'when refreshable without APPEND' do
+        it_behaves_like 'a lossless refreshable round trip', 'EVERY 1 DAY OFFSET 8 HOUR'
+      end
     end
 
     it 'dumps a non-refreshable TO view unchanged' do
