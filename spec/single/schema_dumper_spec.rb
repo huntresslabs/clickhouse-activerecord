@@ -109,6 +109,20 @@ RSpec.describe ClickhouseActiverecord::SchemaDumper, :migrations do
       end
     end
 
+    context 'datetime64 with timezone' do
+      let(:directory) { 'dsl_table_with_datetime64_timezone_creation' }
+
+      it 'dumps DateTime64 carrying a timezone as a raw column' do
+        expect { subject }.to output(
+          satisfy do |schema|
+            expect(schema).to match(/t\.column "datetime64_tz", "DateTime64\(3, 'UTC'\)", null: false/)
+            expect(schema).to match(/t\.column "datetime64_tz_nullable", "Nullable\(DateTime64\(3, 'UTC'\)\)"/)
+            expect(schema).to match(/t\.datetime "datetime64", precision: 3, null: false/)
+          end
+        ).to_stdout_from_any_process
+      end
+    end
+
     context 'aggregating_merge_tree preserves aggregate function columns' do
       let(:directory) { 'schema_table_with_summing_merge_tree_aggregate_function' }
 
