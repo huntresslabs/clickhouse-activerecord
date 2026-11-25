@@ -408,13 +408,13 @@ module ActiveRecord
       end
 
       def create_dictionary(name, body)
-        execute "CREATE DICTIONARY #{apply_cluster(quote_table_name(name))} #{body}"
+        execute "CREATE DICTIONARY #{apply_cluster(quote_dictionary_name(name))} #{body}"
       end
 
       def drop_dictionary(name, options = {})
         query = "DROP DICTIONARY"
         query = "#{query} IF EXISTS " if options[:if_exists]
-        query = "#{query} #{quote_table_name(name)}"
+        query = "#{query} #{quote_dictionary_name(name)}"
         query = apply_cluster(query)
         query = "#{query} SYNC" if options[:sync]
 
@@ -569,6 +569,10 @@ module ActiveRecord
       end
 
       private
+
+      def quote_dictionary_name(name)
+        "`#{name.to_s.gsub('`', '\\\\`')}`"
+      end
 
       def connect
         @connection = @connection_parameters[:connection] || Net::HTTP.start(@connection_parameters[:host], @connection_parameters[:port], use_ssl: @connection_parameters[:ssl], verify_mode: OpenSSL::SSL::VERIFY_NONE)

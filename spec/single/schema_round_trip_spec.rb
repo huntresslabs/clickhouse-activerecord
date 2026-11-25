@@ -204,6 +204,28 @@ RSpec.describe 'Schema dump round-trip' do
       expect(connection.show_create_table('rt_dict')).to eq(original)
     end
 
+    context 'when the dictionary name needs quoting' do
+      before do
+        connection.execute(<<~SQL.squish)
+          CREATE DICTIONARY `rt dict` (`id` UInt64, `name` String)
+          PRIMARY KEY id
+          SOURCE(CLICKHOUSE(TABLE 'rt_src'))
+          LAYOUT(HASHED())
+          LIFETIME(MIN 0 MAX 3600)
+        SQL
+      end
+
+      after { connection.execute('DROP DICTIONARY IF EXISTS `rt dict`') }
+
+      it 'loads its dump over a database that still has the dictionary' do
+        original = connection.show_create_table('rt dict')
+
+        ActiveRecord::Migration.suppress_messages { eval(dump) } # rubocop:disable Security/Eval
+
+        expect(connection.show_create_table('rt dict')).to eq(original)
+      end
+    end
+
     context 'when a view reads the dictionary' do
       before { connection.execute('CREATE VIEW rt_dict_view AS SELECT id, name FROM rt_dict') }
 
