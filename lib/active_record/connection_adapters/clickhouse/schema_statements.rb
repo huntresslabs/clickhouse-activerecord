@@ -141,6 +141,12 @@ module ActiveRecord
           result['data'].flatten
         end
 
+        def dictionaries(name = nil)
+          result = do_system_execute("SHOW TABLES WHERE engine = 'Dictionary'", name)
+          return [] if result.nil?
+          result['data'].flatten
+        end
+
         def functions
           result = do_system_execute("SELECT name FROM system.functions WHERE origin = 'SQLUserDefined' ORDER BY name")
           return [] if result.nil?

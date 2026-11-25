@@ -164,4 +164,84 @@ RSpec.describe 'Schema dump round-trip' do
       )
     end
   end
+
+  context 'with dictionaries' do
+    before do
+      connection.execute('CREATE TABLE rt_src (`id` UInt64, `name` String) ENGINE = MergeTree ORDER BY id')
+      connection.execute(<<~SQL.squish)
+        CREATE DICTIONARY rt_dict (`id` UInt64, `name` String)
+        PRIMARY KEY id
+        SOURCE(CLICKHOUSE(TABLE 'rt_src'))
+        LAYOUT(HASHED())
+        LIFETIME(MIN 0 MAX 3600)
+      SQL
+    end
+
+    after do
+      connection.execute('DROP DICTIONARY IF EXISTS rt_dict')
+      connection.execute('DROP TABLE IF EXISTS rt_src')
+    end
+
+    it 'recreates an identical dictionary from its dump' do
+      original = connection.show_create_table('rt_dict')
+      create_line = dump[/^  create_dictionary "rt_dict", .*$/]
+
+      connection.execute('DROP DICTIONARY rt_dict')
+      ActiveRecord::Migration.suppress_messages { ActiveRecord::Schema.new.instance_eval(create_line) }
+
+      expect(connection.show_create_table('rt_dict')).to eq(original)
+    end
+
+    it 'does not dump a dictionary as a table' do
+      expect(dump.lines.grep(/create_table "rt_dict"|# TABLE: rt_dict$/)).to be_empty
+    end
+
+    it 'loads its dump over a database that still has the dictionary and its source table' do
+      original = connection.show_create_table('rt_dict')
+
+      ActiveRecord::Migration.suppress_messages { eval(dump) } # rubocop:disable Security/Eval
+
+      expect(connection.show_create_table('rt_dict')).to eq(original)
+    end
+
+    context 'when the dictionary name needs quoting' do
+      before do
+        connection.execute(<<~SQL.squish)
+          CREATE DICTIONARY `rt dict` (`id` UInt64, `name` String)
+          PRIMARY KEY id
+          SOURCE(CLICKHOUSE(TABLE 'rt_src'))
+          LAYOUT(HASHED())
+          LIFETIME(MIN 0 MAX 3600)
+        SQL
+      end
+
+      after { connection.execute('DROP DICTIONARY IF EXISTS `rt dict`') }
+
+      it 'loads its dump over a database that still has the dictionary' do
+        original = connection.show_create_table('rt dict')
+
+        ActiveRecord::Migration.suppress_messages { eval(dump) } # rubocop:disable Security/Eval
+
+        expect(connection.show_create_table('rt dict')).to eq(original)
+      end
+    end
+
+    context 'when a view reads the dictionary' do
+      before { connection.execute('CREATE VIEW rt_dict_view AS SELECT id, name FROM rt_dict') }
+
+      after { connection.execute('DROP VIEW IF EXISTS rt_dict_view') }
+
+      it 'loads its dump into an empty database' do
+        original = connection.show_create_table('rt_dict_view')
+        schema = dump
+        connection.execute('DROP VIEW rt_dict_view')
+        connection.execute('DROP DICTIONARY rt_dict')
+        connection.execute('DROP TABLE rt_src')
+
+        ActiveRecord::Migration.suppress_messages { eval(schema) } # rubocop:disable Security/Eval
+
+        expect(connection.show_create_table('rt_dict_view')).to eq(original)
+      end
+    end
+  end
 end
