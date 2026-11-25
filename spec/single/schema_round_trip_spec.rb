@@ -164,4 +164,44 @@ RSpec.describe 'Schema dump round-trip' do
       )
     end
   end
+
+  context 'with dictionaries' do
+    before do
+      connection.execute('CREATE TABLE rt_src (`id` UInt64, `name` String) ENGINE = MergeTree ORDER BY id')
+      connection.execute(<<~SQL.squish)
+        CREATE DICTIONARY rt_dict (`id` UInt64, `name` String)
+        PRIMARY KEY id
+        SOURCE(CLICKHOUSE(TABLE 'rt_src'))
+        LAYOUT(HASHED())
+        LIFETIME(MIN 0 MAX 3600)
+      SQL
+    end
+
+    after do
+      connection.execute('DROP DICTIONARY IF EXISTS rt_dict')
+      connection.execute('DROP TABLE IF EXISTS rt_src')
+    end
+
+    it 'recreates an identical dictionary from its dump' do
+      original = connection.show_create_table('rt_dict')
+      create_statement = dump[/^  execute ("CREATE DICTIONARY rt_dict .*")$/, 1]&.undump
+
+      connection.execute('DROP DICTIONARY rt_dict')
+      connection.execute(create_statement)
+
+      expect(connection.show_create_table('rt_dict')).to eq(original)
+    end
+
+    it 'does not dump a dictionary as a table' do
+      expect(dump.lines.grep(/create_table "rt_dict"|# TABLE: rt_dict$/)).to be_empty
+    end
+
+    it 'loads its dump over a database that still has the dictionary and its source table' do
+      original = connection.show_create_table('rt_dict')
+
+      ActiveRecord::Migration.suppress_messages { eval(dump) } # rubocop:disable Security/Eval
+
+      expect(connection.show_create_table('rt_dict')).to eq(original)
+    end
+  end
 end

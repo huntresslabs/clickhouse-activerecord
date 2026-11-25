@@ -22,11 +22,29 @@ module ClickhouseActiverecord
 
       view_tables = @connection.views.sort
       materialized_view_tables = @connection.materialized_views.sort
-      sorted_tables = @connection.tables.sort - view_tables - materialized_view_tables
+      all_dictionaries = @connection.dictionaries.sort
+      dictionaries = all_dictionaries.reject { |name| ignored?(name) }
+      sorted_tables = @connection.tables.sort - view_tables - materialized_view_tables - all_dictionaries
+
+      # ClickHouse won't drop a table that a dictionary reads from, so the
+      # dictionaries go first or reloading the schema fails on force: :cascade.
+      dictionaries.each do |dictionary_name|
+        stream.puts "  execute #{"DROP DICTIONARY IF EXISTS `#{dictionary_name}`".inspect}"
+      end
+      stream.puts if dictionaries.any?
 
       (sorted_tables + view_tables + materialized_view_tables).each do |table_name|
         table(table_name, stream) unless ignored?(table_name)
       end
+
+      dictionaries.each do |dictionary_name|
+        dictionary(dictionary_name, stream)
+      end
+    end
+
+    def dictionary(dictionary, stream)
+      stream.puts "  execute #{@connection.show_create_table(dictionary).inspect}"
+      stream.puts
     end
 
     def table(table, stream)
