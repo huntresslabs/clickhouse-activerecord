@@ -184,10 +184,10 @@ RSpec.describe 'Schema dump round-trip' do
 
     it 'recreates an identical dictionary from its dump' do
       original = connection.show_create_table('rt_dict')
-      create_statement = dump[/^  execute ("CREATE DICTIONARY rt_dict .*")$/, 1]&.undump
+      create_line = dump[/^  create_dictionary "rt_dict", .*$/]
 
       connection.execute('DROP DICTIONARY rt_dict')
-      connection.execute(create_statement)
+      ActiveRecord::Migration.suppress_messages { ActiveRecord::Schema.new.instance_eval(create_line) }
 
       expect(connection.show_create_table('rt_dict')).to eq(original)
     end
@@ -202,6 +202,24 @@ RSpec.describe 'Schema dump round-trip' do
       ActiveRecord::Migration.suppress_messages { eval(dump) } # rubocop:disable Security/Eval
 
       expect(connection.show_create_table('rt_dict')).to eq(original)
+    end
+
+    context 'when a view reads the dictionary' do
+      before { connection.execute('CREATE VIEW rt_dict_view AS SELECT id, name FROM rt_dict') }
+
+      after { connection.execute('DROP VIEW IF EXISTS rt_dict_view') }
+
+      it 'loads its dump into an empty database' do
+        original = connection.show_create_table('rt_dict_view')
+        schema = dump
+        connection.execute('DROP VIEW rt_dict_view')
+        connection.execute('DROP DICTIONARY rt_dict')
+        connection.execute('DROP TABLE rt_src')
+
+        ActiveRecord::Migration.suppress_messages { eval(schema) } # rubocop:disable Security/Eval
+
+        expect(connection.show_create_table('rt_dict_view')).to eq(original)
+      end
     end
   end
 end

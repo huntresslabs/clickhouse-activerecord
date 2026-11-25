@@ -407,6 +407,20 @@ module ActiveRecord
         end
       end
 
+      def create_dictionary(name, body)
+        execute "CREATE DICTIONARY #{apply_cluster(quote_table_name(name))} #{body}"
+      end
+
+      def drop_dictionary(name, options = {})
+        query = "DROP DICTIONARY"
+        query = "#{query} IF EXISTS " if options[:if_exists]
+        query = "#{query} #{quote_table_name(name)}"
+        query = apply_cluster(query)
+        query = "#{query} SYNC" if options[:sync]
+
+        execute(query)
+      end
+
       def drop_function(name, options = {})
         query = "DROP FUNCTION"
         query = "#{query} IF EXISTS " if options[:if_exists]
